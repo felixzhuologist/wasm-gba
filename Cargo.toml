@@ -1,0 +1,8 @@
+[package]
+name = "gba"
+version = "0.1.0"
+authors = ["felixzhuologist <felix.czhu@gmail.com>"]
+
+[dependencies]
+enum_primitive = "0.1.1"
+num = "0.2"
