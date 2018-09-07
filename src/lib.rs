@@ -1,5 +1,7 @@
-#[macro_use] extern crate enum_primitive;
+#[macro_use]
+extern crate enum_primitive;
 extern crate num;
+
 use num::FromPrimitive;
 
 enum_from_primitive! {
@@ -433,5 +435,64 @@ impl CPU {
                 self.set_cpsr(val);
             }
         }
+    }
+
+    /// multiply instruction, which is a data processing instruction where both 
+    /// bits 4 and 7 are 1
+    /// 
+    /// 27 .. 22 | 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 8 | 7 .. 4 | 3 .. 0
+    ///   000000 | A  | S  |    Rd    |    Rn    |    Rs   |  1001  |  Rm 
+    /// 
+    pub fn multiply(&mut self, ins: u32) -> Result<(), &'static str> {
+        let rm = ins & 0xF;
+        let rn = (ins >> 12) & 0xF;
+        let rd = (ins >> 16) & 0xF;
+        if rd == 15 || rm == 15 || rn == 15 {
+            return Err("Can't use R15 as operand or dest in mul");
+        }
+        if rd == rm {
+            return Err("Rd and Rm can't be the same in mul");
+        }
+        let mut result = (self.r[rm as usize] as u64) * (self.r[rn as usize] as u64);
+        if (ins >> 21) & 1 == 1 {
+            result += self.r[((ins >> 8) & 0xF) as usize] as u64;
+        }
+        self.r[rd as usize] = result as u32;
+        if (ins >> 20) & 1 == 1 {
+            self.set_n(((result >> 31) & 1) == 1);
+            self.set_z(result == 0);
+        }
+        Ok(())
+    }
+
+    /// multiply into a u64 that is stored into a hi and lo register
+    /// 27 .. 23 | 22 | 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 8 | 7 .. 4 | 3 .. 0
+    ///   00001  | U  | A  | S  |   Rd hi  |   Rd lo  |   Rs    |  1001  |  Rm
+    pub fn multiply_long(&mut self, ins: u32) -> Result<(), &'static str> {
+        let rm = ins & 0xF;
+        let rs = (ins >> 8) & 0xF;
+        let rdhi = (ins >> 16) & 0xF;
+        let rdlo = (ins >> 12) & 0xF;
+        if rm == 15 || rs == 15 || rdhi == 15 || rdlo == 15 {
+            return Err("Can't use R15 as operand or dest in mul");
+        }
+        if rdhi == rdlo || rdhi == rm || rdlo == rm {
+            return Err("RdHi, RdLo, and Rm must all specify different registers");
+        }
+
+        let mut result = (self.r[rm as usize] as u64) * (self.r[rs as usize] as u64);
+        if (ins >> 21) & 1 == 1 {
+            result *= 2;
+        }
+
+        let top = (result >> 32) as u32;
+        let bot = result as u32;
+        self.r[rdhi as usize] = top;
+        self.r[rdlo as usize] = bot;
+        if (ins >> 20) & 1 == 1 {
+            self.set_n(((top >> 31) & 1) == 1);
+            self.set_z(result == 0);
+        }
+        Ok(())
     }
 }
