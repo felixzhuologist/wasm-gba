@@ -2,8 +2,9 @@
 extern crate num;
 use num::FromPrimitive;
 
+enum_from_primitive! {
 #[repr(u8)]
-pub enum ArithOp {
+pub enum DataOp {
     AND = 0,
     EOR,
     SUB,
@@ -20,6 +21,7 @@ pub enum ArithOp {
     MOV,
     BIC,
     MVN
+}
 }
 
 enum_from_primitive! {
@@ -43,6 +45,7 @@ pub enum CondField {
 }
 }
 
+#[derive(PartialEq)]
 #[repr(u8)]
 pub enum ProcessorMode {
     USR = 0b10000,
@@ -86,6 +89,11 @@ pub struct CPU {
     r15: u32,
     /// current processor status register
     /// bits: [N, Z, C, V, ... I, F, T, M4, M3, M2, M1, M0]
+    /// flag | logical instruction     | arithmetic instruction
+    ///  N   | none                    | bit 31 of the result has been set
+    ///  Z   | result is 0             | result is 0
+    ///  C   | carry flag after shift  | result was > than 32 bits
+    ///  V   | none                    | result was > 31 bits 
     cpsr: u32,
     /// banked SPSR registers
     spsr_svc: u32,
@@ -101,9 +109,21 @@ impl CPU {
         self.cpsr >> 31
     }
 
+    fn set_n(&mut self, val: bool) {
+        unimplemented!()
+    }
+
+    fn get_mode(&self) -> ProcessorMode {
+        unimplemented!()
+    }
+
     /// zero result from ALU flag
     fn get_z(&self) -> u32 {
         (self.cpsr >> 30) & 1
+    }
+
+    fn set_z(&mut self, val: bool) {
+        unimplemented!()
     }
 
     /// ALU operation carried out
@@ -119,6 +139,14 @@ impl CPU {
     /// ALU operation overflowed
     fn get_v(&self) -> u32 {
         (self.cpsr >> 28) & 1
+    }
+
+    fn set_v(&mut self, val: bool) {
+        unimplemented!()
+    }
+
+    fn restore_cpsr(&mut self) {
+        unimplemented!()
     }
 
     fn satisfies_cond(&self, cond: u8) -> bool {
@@ -174,47 +202,88 @@ impl CPU {
     /// | 31 ... 28 | 27 | 26 | 25 | 24 ... 21 | 20 | 19 ... 16 | 15 ... 12 | 11 ... 0  |
     /// |    cond   | 0  | 0  | I  |  opcode   | S  |     Rn    |    Rd     | operand 2 |
     pub fn data_proc(&mut self, ins: u32) -> Result<(), &'static str> {
-        let opcode = ((ins >> 1) & 0x00F00000) >> 19;
-        let opcode: ArithOp = unsafe {
-            std::mem::transmute(opcode as u8)
-        };
+        let opcode = DataOp::from_u32(((ins >> 1) & 0x00F00000) >> 19).unwrap();
+        let dest = (((ins >> 12) as u8) & 0x0F) as usize;
         let op1 = self.r[(((ins >> 16) as u8) & 0x0F) as usize];
-        let dest = ((ins >> 12) as u8) & 0x0F;
-        let op2 = if (ins >> 25) == 1 {
+        let (op2, shift_carry) = if (ins >> 25) == 1 {
             // immediate operand rotate field is a 4 bit unsigned int which specifies
             // a shift operation on the 8 bit immediate value
             let rotate = (ins >> 8) & 0xF;
             // the imm value i szero extended to 32 bits then subject to a rotate
             // right by twice the value in the rotate field
-            (ins & 0x0000000F).rotate_right(rotate * 2)
+            ((ins & 0x0000000F).rotate_right(rotate * 2), false)
+            // TODO: what is carry flag set to when I=1 and a logical op is used?
         } else {
             self.apply_shift(ins)?
         };
+        
+        let (result, carry_out) = match opcode {
+            DataOp::AND => (op1 & op2, shift_carry),
+            DataOp::EOR => (op1 ^ op2, shift_carry),
+            DataOp::SUB => op1.overflowing_sub(op2),
+            DataOp::RSB => op2.overflowing_sub(op1),
+            DataOp::ADD => op1.overflowing_add(op2),
+            DataOp::ADC => {
+                let (r1, c1) = op1.overflowing_add(op2);
+                let (r2, c2) = r1.overflowing_add(self.get_c());
+                (r2, c1 || c2)
+            },
+            DataOp::SBC => {
+                let (r1, c1) = op1.overflowing_sub(op2);
+                let (r2, c2) = r1.overflowing_sub(1);
+                let sub_overflow = c1 || c2;
+                let (result, add_overflow) = r2.overflowing_add(self.get_c());
+                // if we "underflowed" then overflowed, then they cancel out
+                (result, sub_overflow ^ add_overflow)
+            },
+            DataOp::RSC => {
+                let (r1, c1) = op2.overflowing_sub(op1);
+                let (r2, c2) = r1.overflowing_sub(1);
+                let sub_overflow = c1 || c2;
+                let (result, add_overflow) = r2.overflowing_add(self.get_c());
+                // if we "underflowed" then overflowed, then they cancel out
+                (result, sub_overflow ^ add_overflow)
+            },
+            DataOp::TST => (op1 & op2, shift_carry),
+            DataOp::TEQ => (op1 ^ op2, shift_carry),
+            DataOp::CMP => op1.overflowing_sub(op2),
+            DataOp::CMN => op1.overflowing_add(op2),
+            DataOp::ORR => (op1 | op2, shift_carry),
+            DataOp::MOV => (op2, shift_carry),
+            DataOp::BIC => (op1 & (!op2), shift_carry),
+            DataOp::MVN => (!op2, shift_carry)
+        };
 
-        let rd = (ins >> 12) & 0xF;
-        match opcode {
-            ArithOp::AND => {},
-            ArithOp::EOR => {},
-            ArithOp::SUB => {},
-            ArithOp::RSB => {},
-            ArithOp::ADD => {},
-            ArithOp::ADC => {},
-            ArithOp::SBC => {},
-            ArithOp::RSC => {},
-            ArithOp::TST => {},
-            ArithOp::TEQ => {},
-            ArithOp::CMP => {},
-            ArithOp::CMN => {},
-            ArithOp::ORR => {},
-            ArithOp::MOV => {},
-            ArithOp::BIC => {},
-            ArithOp::MVN => {}
+        let should_write = match opcode {
+            DataOp::TST |
+            DataOp::TEQ |
+            DataOp::CMP |
+            DataOp::CMN => true,
+            _ => false
+        };
+
+        if should_write {
+            self.r[dest] = result;
+        }
+
+        let set_status = ((ins >> 20) & 1) == 1;
+        if set_status {
+            // TODO: how are we supposed to know if the operands are signed?
+            // and detect if the V flag should be set
+            self.set_c(carry_out);
+            self.set_z(result == 0);
+            self.set_n(((result >> 31) & 1) == 1);
+        }
+
+        if dest == 15 && set_status {
+            self.restore_cpsr();
         }
         Ok(())
     }
 
-    /// uses the rightmost 12 bits to get the second operand from a register
-    /// for the data process instruction. The 12 bits follows one of the following formats:
+    /// uses the rightmost 12 bits to get the second operand from a register and
+    /// the carry out from the barrel shifter for the data process instruction.
+    /// The 12 bits follows one of the following formats:
     /// ```
     /// | 11      ...       7 | 6   ...  5 | 4 | Rm
     /// |    shift amount     | shift type | 0 |
@@ -232,7 +301,7 @@ impl CPU {
     ///     - 11 = rotate right
     ///   - the least significant byte of the contents of the shift register are
     ///     used to determine the shift amount
-    pub fn apply_shift(&mut self, ins: u32) -> Result<u32, &'static str> {
+    pub fn apply_shift(&mut self, ins: u32) -> Result<(u32, bool), &'static str> {
         let shift_amount = if ((ins >> 4) & 1) == 0 {
             (ins >> 7) & 0b11111             
         } else if ((ins >> 4) & 1) == 1 && ((ins >> 7) & 1) == 0 {
@@ -249,59 +318,54 @@ impl CPU {
         match ShiftType::from_u8((ins >> 5) as u8) {
             Some(ShiftType::LSL) => {
                 if shift_amount == 0 {
-                    return Ok(rm_val);
+                    return Ok((rm_val, self.get_c() == 1));
                 } else if shift_amount > 32 {
-                    self.set_c(false);
-                    return Ok(0);
+                    return Ok((0, false));
                 }
                 // save the least significant discarded bit as the carry output
                 let carry_out = (rm_val >> (32 - shift_amount)) & 1;
-                self.set_c(carry_out == 1);
-                return Ok(rm_val << shift_amount);
+                return Ok((rm_val << shift_amount, carry_out == 1));
             },
             Some(ShiftType::LSR) => {
                 // LSR #0 is actually interpreted as ASR #32 since it is redundant
                 // with LSL #0 
                 if shift_amount == 0 {
                     let carry_out = (rm_val >> 31) & 1;
-                    self.set_c(carry_out == 1);
-                    return Ok(if carry_out == 1 {std::u32::MAX} else {0})
+                    return Ok((
+                        if carry_out == 1 {std::u32::MAX} else {0},
+                        carry_out == 1))
                 } else if shift_amount > 32 {
-                    self.set_c(false);
-                    return Ok(0);
+                    return Ok((0, false));
                 } else {
                     // otherwise use most significant discarded bit as the carry output
                     let partial_shifted = rm_val >> (shift_amount - 1);
                     let carry_out = partial_shifted & 1;
-                    self.set_c(carry_out == 1);
-                    return Ok(partial_shifted >> 1);
+                    return Ok((partial_shifted >> 1, carry_out == 1));
                 }
             },
             Some(ShiftType::ASR) => {
                 if shift_amount == 0 {
-                    return Ok(rm_val);
+                    return Ok((rm_val, self.get_c() == 1));
                 } else if shift_amount > 32 {
                     let top_bit = (rm_val >> 31) & 1;
-                    self.set_c(top_bit == 1);
-                    return Ok(if top_bit == 1 {std::u32::MAX} else {0});
+                    return Ok((
+                        if top_bit == 1 {std::u32::MAX} else {0},
+                        top_bit == 1));
                 }
                 // convert to i32 to get arithmetic shifting
                 let partial_shifted = (rm_val as i32) >> (shift_amount - 1);
                 let carry_out = partial_shifted & 1;
-                self.set_c(carry_out == 1);
-                return Ok((partial_shifted >> 1) as u32);
+                return Ok(((partial_shifted >> 1) as u32, carry_out == 1));
             },
             Some(ShiftType::RSR) => {
                 // RSR #0 is used to encode RRX
                 if shift_amount == 0 {
                     let result = (rm_val >> 1) | (self.get_c() << 31);
-                    self.set_c((rm_val & 1) == 1);
-                    return Ok(result);
+                    return Ok((result, (rm_val & 1) == 1));
                 }
                 let result = rm_val.rotate_right(shift_amount);
                 let carry_out = (result >> 31) & 1;
-                self.set_c(carry_out == 1);
-                return Ok(result);
+                return Ok((result, carry_out == 1));
             },
             None => Err("invalid shift type")
         }
