@@ -145,7 +145,25 @@ impl CPU {
         unimplemented!()
     }
 
+    fn get_cpsr(&self) -> u32 {
+        unimplemented!()
+    }
+
+    /// restore CPSR to the SPSR for the current mode
     fn restore_cpsr(&mut self) {
+        unimplemented!()
+    }
+
+    fn set_cpsr(&mut self, val: u32) {
+        unimplemented!()
+    }
+
+    fn get_spsr(&self) -> u32 {
+        unimplemented!()
+    }
+
+    /// Set the SPSR for the current mode
+    fn set_spsr(&mut self, val: u32) {
         unimplemented!()
     }
 
@@ -266,8 +284,12 @@ impl CPU {
             self.r[dest] = result;
         }
 
-        let set_status = ((ins >> 20) & 1) == 1;
-        if set_status {
+        let set_status_bit = ((ins >> 20) & 1) == 1;
+        if !set_status_bit && should_write {
+            return Err("trying to use data instruction handler on a MRS/MSR instruction");
+        }
+    
+        if set_status_bit || !should_write  {
             // TODO: how are we supposed to know if the operands are signed?
             // and detect if the V flag should be set
             self.set_c(carry_out);
@@ -275,7 +297,7 @@ impl CPU {
             self.set_n(((result >> 31) & 1) == 1);
         }
 
-        if dest == 15 && set_status {
+        if dest == 15 && set_status_bit {
             self.restore_cpsr();
         }
         Ok(())
@@ -368,6 +390,48 @@ impl CPU {
                 return Ok((result, carry_out == 1));
             },
             None => Err("invalid shift type")
+        }
+    }
+
+    /// MRS/MSR instructions are TEQ/TST/CMN/CMP Data Processing operations but
+    /// without the S flag set and allow access to the CPSR/SPSR registers. The
+    /// instruction formats are:
+    /// 
+    /// transfer PSR contents to register
+    /// 31 .. 28 | 27 .. 23 | 22 | 21 .. 16 | 15 .. 12 | 11 .. 0 |
+    ///   cond   |   00010  | Ps |  001111  |    Rd    | 00....0 |
+    /// 
+    /// transfer Rm contents to PSR
+    /// 31 .. 28 | 27 .. 23 | 22 | 21  ..  12 | 11 .. 4 | 3 .. 0 |
+    ///   cond   |   00010  | Pd | 1010011111 | 00....0 | Rm     |
+    /// 
+    /// transfer reg or immediate contents to PSR flag bits only
+    /// 31 .. 28 | 27 | 26 | 25 | 24 | 23 | 22 | 21  ..  12 | 11  .. 0 |
+    ///    cond  | 0  | 0  | I  | 1  | 0  | Pd | 1010001111 | operand
+    /// 
+    /// where Px is 0 for the CPSR and 1 for the SPSR of the current mode
+    pub fn psr_transfer(&mut self, ins: u32) {
+        if ((ins >> 21) & 1) == 0 { // read
+            let val = if ((ins >> 22) & 1) == 1 {
+                self.get_spsr()
+            } else {
+                self.get_cpsr()
+            };
+            self.r[((ins >> 12) & 0xF) as usize] = val;
+        } else {
+            let val = if ((ins >> 25) & 1) == 1 {
+                // TODO: refactor immediate + rotate logic
+                let rotate = (ins >> 8) & 0xF;
+                (ins & 0x0000000F).rotate_right(rotate * 2)
+            } else { // reg
+                self.r[(ins & 0xF) as usize]
+            };
+
+            if ((ins >> 22) & 1) == 1 {
+                self.set_spsr(val);
+            } else {
+                self.set_cpsr(val);
+            }
         }
     }
 }
