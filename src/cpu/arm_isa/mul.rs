@@ -1,0 +1,55 @@
+use super::{Instruction, InstructionType};
+use ::cpu::CPU;
+use ::util;
+
+/// The multiply and multiply-accumulate instructions perform integer multiplication
+/// on the contents of two registers Rm and Rs and stores the lower 32 bits of the
+/// result in Rd
+struct Multiply {
+    /// if true, add contents of Rn to the product before storing in Rd
+    accumulate: bool,
+    set_flags: bool,
+    rd: usize,
+    rn: usize,
+    rs: usize,
+    rm: usize
+}
+
+impl Multiply {
+    /// parses from the following format:
+    /// 27 .. 22 | 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 8 | 7 .. 4 | 3 .. 0
+    ///   000000 | A  | S  |    Rd    |    Rn    |    Rs   |  1001  |  Rm 
+    pub fn parse_instruction(ins: u32) -> Multiply {
+        Multiply {
+            accumulate: util::get_bit(ins, 21),
+            set_flags: util::get_bit(ins, 20),
+            rd: util::get_nibble(ins, 16) as usize,
+            rn: util::get_nibble(ins, 12) as usize,
+            rs: util::get_nibble(ins, 8) as usize,
+            rm: util::get_nibble(ins, 0) as usize
+        }
+    }
+}
+
+impl Instruction for Multiply {
+    fn get_type(&self) -> InstructionType { InstructionType::Multiply }
+    fn process_instruction(&self, cpu: &mut CPU) {
+        if self.rd == 15 || self.rm == 15 || self.rn == 15 {
+            panic!("Can't use R15 as operand or dest in mul");
+        }
+        if self.rd == self.rm {
+            panic!("Rd and Rm can't be the same in mul");
+        }
+        // since we only care about the bottom 32 bits, this will be the same
+        // for both signed and unsigned integers
+        let mut result: u64 = (cpu.r[self.rm] as u64) * (cpu.r[self.rn] as u64);
+        if self.accumulate {
+            result += cpu.r[self.rs] as u64;
+        }
+        cpu.r[self.rd] = result as u32;
+        if self.set_flags {
+            cpu.set_n(((result >> 31) & 1) == 1);
+            cpu.set_z(result == 0);
+        }
+    }
+}

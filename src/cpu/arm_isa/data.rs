@@ -41,7 +41,6 @@ struct DataProc {
 
 impl DataProc {
     fn parse_instruction(ins: u32) -> DataProc {
-        let op2 = ins & 0xFF;
         let is_imm = util::get_bit(ins, 25);
         DataProc {
             rd: util::get_nibble(ins, 12) as usize,
@@ -65,7 +64,7 @@ impl DataProc {
 
 impl Instruction for DataProc {
     fn get_type(&self) -> InstructionType { InstructionType::DataProc }
-    fn process_instruction(&self, cpu: &mut CPU, ins: u32) {
+    fn process_instruction(&self, cpu: &mut CPU) {
         let op1 = cpu.r[self.rn];
         let (op2, shift_carry) = match self.op2 {
             // TODO: what is carry flag set to when I=1 and a logical op is used?
@@ -122,12 +121,11 @@ impl Instruction for DataProc {
             cpu.r[self.rd] = result;
         }
 
-        let set_status_bit = ((ins >> 20) & 1) == 1;
-        if !set_status_bit && should_write {
+        if !self.set_flags && should_write {
             panic!("trying to use data instruction handler on a MRS/MSR instruction");
         }
     
-        if set_status_bit || !should_write  {
+        if self.set_flags || !should_write  {
             // TODO: how are we supposed to know if the operands are signed?
             // and detect if the V flag should be set
             cpu.set_c(carry_out);
@@ -135,7 +133,7 @@ impl Instruction for DataProc {
             cpu.set_n(((result >> 31) & 1) == 1);
         }
 
-        if self.rd == 15 && set_status_bit {
+        if self.rd == 15 && self.set_flags {
             cpu.restore_cpsr();
         }
     }

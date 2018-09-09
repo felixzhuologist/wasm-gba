@@ -1,29 +1,6 @@
-pub mod isa;
+pub mod arm_isa;
 
 use num::FromPrimitive;
-use std;
-
-enum_from_primitive! {
-#[repr(u8)]
-pub enum DataOp {
-    AND = 0,
-    EOR,
-    SUB,
-    RSB,
-    ADD,
-    ADC,
-    SBC,
-    RSC,
-    TST,
-    TEQ,
-    CMP,
-    CMN,
-    ORR,
-    MOV,
-    BIC,
-    MVN
-}
-}
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -68,7 +45,7 @@ pub enum ShiftType {
 }
 }
 
-pub fn get_instruction_handler(ins: u32) -> Box<isa::Instruction> {
+pub fn get_instruction_handler(ins: u32) -> Box<arm_isa::Instruction> {
     unimplemented!()
 }
 
@@ -172,6 +149,11 @@ impl CPU {
         unimplemented!()
     }
 
+    // TODO: how should this function look? should we have an enum for ARM/THUMB?
+    fn set_isa(&mut self, thumb: bool) {
+        unimplemented!()
+    }
+
     fn satisfies_cond(&self, cond: u8) -> bool {
         match CondField::from_u8(cond) {
             Some(CondField::EQ) => self.get_z() == 1,
@@ -204,128 +186,6 @@ impl CPU {
         // right instruction handler, and that the given instruction handler
         // does the right thing.
         get_instruction_handler(ins)
-            .process_instruction(self, ins);
-    }
-
-    pub fn branch_and_exchange(&mut self, ins: u32) {
-        let register = (ins & 0x0000000F) as u8;
-        let thumb = (register & 1) == 1;
-        self.r15 = self.r[register as usize];
-    }
-
-    pub fn branch(&mut self, ins: u32) {
-        let link = (ins >> 24) == 1;
-        if link {
-            // PC - 4 to adjust for prefetch
-            self.r14 = self.r15 - 4;
-        }
-        let mut offset = ins & 0x00FFFFFF; // 24 lower bits
-        // TODO: use build in arithmetic shift by converting to signed?
-        if (offset >> 23) == 1 {
-            offset |= 0xFF000000; // sign extend
-        }
-        // TODO: group registers and create PC method?
-        self.r15 = ((self.r15 as i64) + ((offset << 2) as i64)) as u32;
-    }
-
-    /// MRS/MSR instructions are TEQ/TST/CMN/CMP Data Processing operations but
-    /// without the S flag set and allow access to the CPSR/SPSR registers. The
-    /// instruction formats are:
-    /// 
-    /// transfer PSR contents to register
-    /// 31 .. 28 | 27 .. 23 | 22 | 21 .. 16 | 15 .. 12 | 11 .. 0 |
-    ///   cond   |   00010  | Ps |  001111  |    Rd    | 00....0 |
-    /// 
-    /// transfer Rm contents to PSR
-    /// 31 .. 28 | 27 .. 23 | 22 | 21  ..  12 | 11 .. 4 | 3 .. 0 |
-    ///   cond   |   00010  | Pd | 1010011111 | 00....0 | Rm     |
-    /// 
-    /// transfer reg or immediate contents to PSR flag bits only
-    /// 31 .. 28 | 27 | 26 | 25 | 24 | 23 | 22 | 21  ..  12 | 11  .. 0 |
-    ///    cond  | 0  | 0  | I  | 1  | 0  | Pd | 1010001111 | operand
-    /// 
-    /// where Px is 0 for the CPSR and 1 for the SPSR of the current mode
-    pub fn psr_transfer(&mut self, ins: u32) {
-        if ((ins >> 21) & 1) == 0 { // read
-            let val = if ((ins >> 22) & 1) == 1 {
-                self.get_spsr()
-            } else {
-                self.get_cpsr()
-            };
-            self.r[((ins >> 12) & 0xF) as usize] = val;
-        } else {
-            let val = if ((ins >> 25) & 1) == 1 {
-                // TODO: refactor immediate + rotate logic
-                let rotate = (ins >> 8) & 0xF;
-                (ins & 0x0000000F).rotate_right(rotate * 2)
-            } else { // reg
-                self.r[(ins & 0xF) as usize]
-            };
-
-            if ((ins >> 22) & 1) == 1 {
-                self.set_spsr(val);
-            } else {
-                self.set_cpsr(val);
-            }
-        }
-    }
-
-    /// multiply instruction, which is a data processing instruction where both 
-    /// bits 4 and 7 are 1
-    /// 
-    /// 27 .. 22 | 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 8 | 7 .. 4 | 3 .. 0
-    ///   000000 | A  | S  |    Rd    |    Rn    |    Rs   |  1001  |  Rm 
-    /// 
-    pub fn multiply(&mut self, ins: u32) -> Result<(), &'static str> {
-        let rm = ins & 0xF;
-        let rn = (ins >> 12) & 0xF;
-        let rd = (ins >> 16) & 0xF;
-        if rd == 15 || rm == 15 || rn == 15 {
-            return Err("Can't use R15 as operand or dest in mul");
-        }
-        if rd == rm {
-            return Err("Rd and Rm can't be the same in mul");
-        }
-        let mut result = (self.r[rm as usize] as u64) * (self.r[rn as usize] as u64);
-        if (ins >> 21) & 1 == 1 {
-            result += self.r[((ins >> 8) & 0xF) as usize] as u64;
-        }
-        self.r[rd as usize] = result as u32;
-        if (ins >> 20) & 1 == 1 {
-            self.set_n(((result >> 31) & 1) == 1);
-            self.set_z(result == 0);
-        }
-        Ok(())
-    }
-
-    /// multiply into a u64 that is stored into a hi and lo register
-    /// 27 .. 23 | 22 | 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 8 | 7 .. 4 | 3 .. 0
-    ///   00001  | U  | A  | S  |   Rd hi  |   Rd lo  |   Rs    |  1001  |  Rm
-    pub fn multiply_long(&mut self, ins: u32) -> Result<(), &'static str> {
-        let rm = ins & 0xF;
-        let rs = (ins >> 8) & 0xF;
-        let rdhi = (ins >> 16) & 0xF;
-        let rdlo = (ins >> 12) & 0xF;
-        if rm == 15 || rs == 15 || rdhi == 15 || rdlo == 15 {
-            return Err("Can't use R15 as operand or dest in mul");
-        }
-        if rdhi == rdlo || rdhi == rm || rdlo == rm {
-            return Err("RdHi, RdLo, and Rm must all specify different registers");
-        }
-
-        let mut result = (self.r[rm as usize] as u64) * (self.r[rs as usize] as u64);
-        if (ins >> 21) & 1 == 1 {
-            result *= 2;
-        }
-
-        let top = (result >> 32) as u32;
-        let bot = result as u32;
-        self.r[rdhi as usize] = top;
-        self.r[rdlo as usize] = bot;
-        if (ins >> 20) & 1 == 1 {
-            self.set_n(((top >> 31) & 1) == 1);
-            self.set_z(result == 0);
-        }
-        Ok(())
+            .process_instruction(self);
     }
 }
