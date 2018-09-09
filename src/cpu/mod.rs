@@ -1,6 +1,7 @@
 pub mod arm_isa;
 
 use num::FromPrimitive;
+use util;
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -154,29 +155,28 @@ impl CPU {
         unimplemented!()
     }
 
-    fn satisfies_cond(&self, cond: u8) -> bool {
-        match CondField::from_u8(cond) {
-            Some(CondField::EQ) => self.get_z() == 1,
-            Some(CondField::NE) => self.get_z() == 0,
-            Some(CondField::CS) => self.get_c() == 1,
-            Some(CondField::CC) => self.get_c() == 0,
-            Some(CondField::MI) => self.get_n() == 1,
-            Some(CondField::PL) => self.get_n() == 0,
-            Some(CondField::VS) => self.get_v() == 1,
-            Some(CondField::VC) => self.get_v() == 0,
-            Some(CondField::HI) => self.get_c() == 1 && self.get_v() == 0,
-            Some(CondField::LS) => self.get_c() == 0 || self.get_v() == 1,
-            Some(CondField::GE) => self.get_n() == self.get_v(),
-            Some(CondField::LT) => self.get_n() != self.get_v(),
-            Some(CondField::GT) => self.get_z() == 0 && (self.get_n() == self.get_v()),
-            Some(CondField::LE) => self.get_z() == 1 || (self.get_n() != self.get_v()),
-            Some(CondField::AL) => true,
-            None => false
+    fn satisfies_cond(&self, cond: u32) -> bool {
+        match CondField::from_u32(cond).unwrap() {
+            CondField::EQ => self.get_z() == 1,
+            CondField::NE => self.get_z() == 0,
+            CondField::CS => self.get_c() == 1,
+            CondField::CC => self.get_c() == 0,
+            CondField::MI => self.get_n() == 1,
+            CondField::PL => self.get_n() == 0,
+            CondField::VS => self.get_v() == 1,
+            CondField::VC => self.get_v() == 0,
+            CondField::HI => self.get_c() == 1 && self.get_v() == 0,
+            CondField::LS => self.get_c() == 0 || self.get_v() == 1,
+            CondField::GE => self.get_n() == self.get_v(),
+            CondField::LT => self.get_n() != self.get_v(),
+            CondField::GT => self.get_z() == 0 && (self.get_n() == self.get_v()),
+            CondField::LE => self.get_z() == 1 || (self.get_n() != self.get_v()),
+            CondField::AL => true
         }
     }
 
     pub fn process_arm_instruction(&mut self, ins: u32) {
-        let cond = (ins >> 28) as u8;
+        let cond = util::get_nibble(ins, 28);
         if !self.satisfies_cond(cond) {
             return;
         }
