@@ -53,3 +53,20 @@ impl Instruction for Multiply {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse() {
+        let mul = Multiply::parse_instruction(
+            0b0000_00000_1_1_0001_1000_1111_1001_0010);
+        assert!(mul.accumulate);
+        assert!(mul.set_flags);
+        assert_eq!(mul.rd, 1);
+        assert_eq!(mul.rn, 8);
+        assert_eq!(mul.rs, 15);
+        assert_eq!(mul.rm, 2);
+    }
+}

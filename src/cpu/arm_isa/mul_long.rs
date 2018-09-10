@@ -71,3 +71,21 @@ impl Instruction for MultiplyLong {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse() {
+        let mul = MultiplyLong::parse_instruction(
+            0b0000_00001_1_1_1_0001_0010_0011_1001_1000);
+        assert!(mul.is_signed);
+        assert!(mul.accumulate);
+        assert!(mul.set_flags);
+        assert_eq!(mul.rdhi, 1);
+        assert_eq!(mul.rdlo, 2);
+        assert_eq!(mul.rs, 3);
+        assert_eq!(mul.rm, 8);
+    }
+}

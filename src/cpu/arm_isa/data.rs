@@ -1,6 +1,6 @@
 use std;
 use num::FromPrimitive;
-use super::{InstructionType, Instruction};
+use super::{InstructionType, Instruction, RegOrImm};
 use ::cpu::CPU;
 use ::util;
 
@@ -26,11 +26,6 @@ pub enum Op {
 }
 }
 
-pub enum RegOrImm {
-    Imm { rotate: u32, value: u32 },
-    Reg { shift: u32, reg: u32 }
-}
-
 struct DataProc {
     opcode: Op,
     set_flags: bool,
@@ -40,13 +35,16 @@ struct DataProc {
 }
 
 impl DataProc {
+    /// parses the following format:
+    /// 27 .. 26 | 25 | 24 .. 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 0
+    ///    00    | I  |   opcode | S  |    Rn    |    Rd    |    op2
     fn parse_instruction(ins: u32) -> DataProc {
         let is_imm = util::get_bit(ins, 25);
         DataProc {
             rd: util::get_nibble(ins, 12) as usize,
             rn: util::get_nibble(ins, 16) as usize,
             set_flags: util::get_bit(ins, 20),
-            opcode: Op::from_u32(util::get_byte(ins, 21)).unwrap(),
+            opcode: Op::from_u32(util::get_nibble(ins, 21)).unwrap(),
             op2: if is_imm { 
                 RegOrImm::Imm {
                     rotate: util::get_nibble(ins, 8),
@@ -204,5 +202,38 @@ pub fn apply_shift(cpu: &mut CPU, shift: u32, reg: u32) -> (u32, bool) {
                 (result, carry_out == 1)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_reg() {
+        let ins = DataProc::parse_instruction(
+            0b0000_00_0_1010_1_0001_0010_10001000_1001);
+        assert!(ins.set_flags);
+        assert_eq!(ins.opcode as u8, Op::CMP as u8);
+        assert_eq!(ins.rn, 1);
+        assert_eq!(ins.rd, 2);
+        assert!(match ins.op2 {
+            RegOrImm::Reg { shift: 0x88, reg: 9 } => true,
+            _ => false
+        });
+    }
+
+    #[test]
+    fn parse_imm() {
+        let ins = DataProc::parse_instruction(
+            0b0000_00_1_0101_0_1110_0111_0011_00000001);
+        assert!(!ins.set_flags);
+        assert_eq!(ins.opcode as u8, Op::ADC as u8);
+        assert_eq!(ins.rn, 14);
+        assert_eq!(ins.rd, 7);
+        assert!(match ins.op2 {
+            RegOrImm::Imm { rotate: 3, value: 1 } => true,
+            _ => false
+        });
     }
 }

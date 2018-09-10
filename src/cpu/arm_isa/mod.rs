@@ -17,6 +17,11 @@ pub enum InstructionType {
     Branch
 }
 
+pub enum RegOrImm {
+    Imm { rotate: u32, value: u32 },
+    Reg { shift: u32, reg: u32 }
+}
+
 pub trait Instruction {
     fn process_instruction(&self, cpu: &mut super::CPU);
     /// return an enum indicating the instruction type. Used during testing

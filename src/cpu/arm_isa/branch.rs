@@ -16,6 +16,9 @@ struct Branch {
 }
 
 impl Branch {
+    /// parses the following format:
+    /// 27 .. 25 | 24 | 23 .. 0
+    ///    101   | L  | offset
     pub fn parse_instruction(ins: u32) -> Branch {
         Branch {
             offset: ins & 0xFFFFFF,
@@ -38,5 +41,24 @@ impl Instruction for Branch {
 
         // TODO: is i64 necessary?
         cpu.r15 = ((cpu.r15 as i64) + (sign_extended << 2) as i64) as u32;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_with_link() {
+        let branch = Branch::parse_instruction(0x0_B_ABC123);
+        assert!(branch.link);
+        assert_eq!(branch.offset, 0xABC123);
+    }
+
+    #[test]
+    fn parse_without_link() {
+        let branch = Branch::parse_instruction(0x0_A_ABCDEF);
+        assert!(!branch.link);
+        assert_eq!(branch.offset, 0xABCDEF);
     }
 }
