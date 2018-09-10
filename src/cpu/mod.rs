@@ -8,7 +8,8 @@ use self::arm_isa::{
     data,
     mul,
     mul_long,
-    psr
+    psr,
+    single_trans
 };
 
 enum_from_primitive! {
@@ -72,6 +73,8 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
         } else {
             Some(Box::new(data))
         }
+    } else if op0 >= 4 && op0 < 8 {
+        Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
     } else if op0 == 10 || op0 == 11 {
         Some(Box::new(branch::Branch::parse_instruction(ins)))
     } else {
@@ -285,6 +288,18 @@ mod test {
                 get_instruction_handler(0b1111_00010_0_1010011111_00000000_1111)
                     .unwrap().get_type(),
                 InstructionType::PSRTransfer);
+        }
+
+        #[test]
+        fn single_trans() {
+            assert_eq!(
+                get_instruction_handler(0xA_4_123456).unwrap().get_type(),
+                InstructionType::SingleDataTransfer
+            );
+            assert_eq!(
+                get_instruction_handler(0xA_7_ABCDEF).unwrap().get_type(),
+                InstructionType::SingleDataTransfer
+            );
         }
     }
 }
