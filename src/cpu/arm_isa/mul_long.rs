@@ -5,7 +5,7 @@ use ::util;
 /// The multiply and multiply-accumulate instructions perform integer multiplication
 /// on the contents of two registers Rm and Rs and stores the lower 32 bits of the
 /// result in RdLo and the high 32 bits in RdHi
-struct MultiplyLong {
+pub struct MultiplyLong {
     /// if true, add contents of RdHi,RdLo (as a 64 bit integer) to the product
     /// before storing it
     accumulate: bool,

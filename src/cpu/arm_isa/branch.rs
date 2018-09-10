@@ -5,7 +5,7 @@ use ::util;
 /// This instruction specifies a jump of +/- 32Mbytes. The branch offset must take
 /// account of the prefetch operation, which causes the PC to be 2 words ahead of
 /// the current instruction
-struct Branch {
+pub struct Branch {
     /// the offset is interpreted as a signed 2's complement 24 bit offset which
     /// is shifted left two bits and then sign extended to 32 bits
     offset: u32,

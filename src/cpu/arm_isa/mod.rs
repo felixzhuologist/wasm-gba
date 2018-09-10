@@ -5,6 +5,7 @@ pub mod psr;
 pub mod mul;
 pub mod mul_long;
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum InstructionType {
     DataProc,
     PSRTransfer,

@@ -2,6 +2,14 @@ pub mod arm_isa;
 
 use num::FromPrimitive;
 use util;
+use self::arm_isa::{
+    branch,
+    branch_ex,
+    data,
+    mul,
+    mul_long,
+    psr
+};
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -46,8 +54,29 @@ pub enum ShiftType {
 }
 }
 
-pub fn get_instruction_handler(ins: u32) -> Box<arm_isa::Instruction> {
-    unimplemented!()
+pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
+    let op0 = util::get_nibble(ins, 24);
+    let op1 = util::get_nibble(ins, 20);
+    let op2 = util::get_nibble(ins, 4);
+    if op0 == 0 && op1 < 4 && op2 == 0b1001 {
+        Some(Box::new(mul::Multiply::parse_instruction(ins)))
+    } else if op0 == 0 && op1 > 7 && op2 == 0b1001 {
+        Some(Box::new(mul_long::MultiplyLong::parse_instruction(ins)))
+    } else if op0 == 1 && op2 == 1 {
+        Some(Box::new(branch_ex::BranchAndExchange::parse_instruction(ins)))
+    } else if op0 < 4 {
+        let data = data::DataProc::parse_instruction(ins);
+        let op = data.opcode as u8;
+        if !data.set_flags && op > 7 && op < 12 {
+            Some(Box::new(psr::PSRTransfer::parse_instruction(ins)))
+        } else {
+            Some(Box::new(data))
+        }
+    } else if op0 == 10 || op0 == 11 {
+        Some(Box::new(branch::Branch::parse_instruction(ins)))
+    } else {
+        None
+    }
 }
 
 pub struct CPU {
@@ -185,7 +214,77 @@ impl CPU {
         // this out lets us test the two separate behaviours of picking the
         // right instruction handler, and that the given instruction handler
         // does the right thing.
-        get_instruction_handler(ins)
+        get_instruction_handler(ins).unwrap()
             .process_instruction(self);
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    mod get_instruction_handler {
+        use ::cpu::*;
+        use ::cpu::arm_isa::InstructionType;
+        #[test]
+        fn branch() {
+            assert_eq!(
+                get_instruction_handler(0x0_A_123456).unwrap().get_type(),
+                InstructionType::Branch);
+            assert_eq!(
+                get_instruction_handler(0x0_B_123456).unwrap().get_type(),
+                InstructionType::Branch);
+        }
+
+        #[test]
+        fn bex() {
+            assert_eq!(
+                get_instruction_handler(0x0_12FFF1_5).unwrap().get_type(),
+                InstructionType::BranchAndExchange);
+        }
+
+        #[test]
+        fn data() {
+            assert_eq!(
+                get_instruction_handler(0x03123456).unwrap().get_type(),
+                InstructionType::DataProc);
+            assert_eq!(
+                get_instruction_handler(0xA3123456).unwrap().get_type(),
+                InstructionType::DataProc);
+            assert_eq!(
+                get_instruction_handler(0x001A3D56).unwrap().get_type(),
+                InstructionType::DataProc);
+        }
+
+        #[test]
+        fn mul() {
+            assert_eq!(
+                get_instruction_handler(0x03_123_9_A).unwrap().get_type(),
+                InstructionType::Multiply);
+            assert_eq!(
+                get_instruction_handler(0x02_ABC_9_0).unwrap().get_type(),
+                InstructionType::Multiply);
+        }
+
+        #[test]
+        fn mul_long() {
+            assert_eq!(
+                get_instruction_handler(0x08_123_9_A).unwrap().get_type(),
+                InstructionType::MultiplyLong);
+            assert_eq!(
+                get_instruction_handler(0x0B_ABC_9_0).unwrap().get_type(),
+                InstructionType::MultiplyLong);
+        }
+
+        #[test]
+        fn psr() {
+           assert_eq!(
+                get_instruction_handler(0b0011_00010_1_001111_0000_000000000000)
+                    .unwrap().get_type(),
+                InstructionType::PSRTransfer);
+           assert_eq!(
+                get_instruction_handler(0b1111_00010_0_1010011111_00000000_1111)
+                    .unwrap().get_type(),
+                InstructionType::PSRTransfer);
+        }
     }
 }

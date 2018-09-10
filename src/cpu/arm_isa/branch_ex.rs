@@ -4,7 +4,7 @@ use ::util;
 
 /// This instruction performs a branch by copying the contents of a single register
 /// into the program counter, and causes a pipeline flush and refill.
-struct BranchAndExchange {
+pub struct BranchAndExchange {
     /// contents of this register are written to the PC
     reg: usize,
     /// if true, switch to THUMB instructions after the jump. the LSB of self.reg

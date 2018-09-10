@@ -5,6 +5,7 @@ use ::cpu::CPU;
 use ::util;
 
 enum_from_primitive! {
+#[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum Op {
     AND = 0,
@@ -26,9 +27,9 @@ pub enum Op {
 }
 }
 
-struct DataProc {
-    opcode: Op,
-    set_flags: bool,
+pub struct DataProc {
+    pub opcode: Op,
+    pub set_flags: bool,
     rn: usize,
     rd: usize,
     op2: RegOrImm
@@ -38,7 +39,7 @@ impl DataProc {
     /// parses the following format:
     /// 27 .. 26 | 25 | 24 .. 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 0
     ///    00    | I  |   opcode | S  |    Rn    |    Rd    |    op2
-    fn parse_instruction(ins: u32) -> DataProc {
+    pub fn parse_instruction(ins: u32) -> DataProc {
         let is_imm = util::get_bit(ins, 25);
         DataProc {
             rd: util::get_nibble(ins, 12) as usize,

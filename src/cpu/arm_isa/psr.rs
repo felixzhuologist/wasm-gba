@@ -18,7 +18,7 @@ pub enum TransferType {
 /// without the S flag set. They allow access to the CPSR/SPSR registers, i.e.
 /// reading CPSR/SPSR of the current mode to a register, or writing a reg/immediate
 /// value to the CPSR/SPSR of the current mode.
-struct PSRTransfer {
+pub struct PSRTransfer {
     trans: TransferType
 }
 
