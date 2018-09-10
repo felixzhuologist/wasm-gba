@@ -11,6 +11,7 @@ use self::arm_isa::{
     psr,
     single_trans,
     signed_trans,
+    block_trans,
 };
 
 enum_from_primitive! {
@@ -77,7 +78,9 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
         }
     } else if op0 >= 4 && op0 < 8 {
         Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
-    } else if op0 == 10 || op0 == 11 {
+    } else if op0 == 8 || op0 == 9 {
+        Some(Box::new(block_trans::BlockDataTransfer::parse_instruction(ins)))
+    }else if op0 == 10 || op0 == 11 {
         Some(Box::new(branch::Branch::parse_instruction(ins)))
     } else {
         None
@@ -296,12 +299,20 @@ mod test {
         fn single_trans() {
             assert_eq!(
                 get_instruction_handler(0xA_4_123456).unwrap().get_type(),
-                InstructionType::SingleDataTransfer
-            );
+                InstructionType::SingleDataTransfer);
             assert_eq!(
                 get_instruction_handler(0xA_7_ABCDEF).unwrap().get_type(),
-                InstructionType::SingleDataTransfer
-            );
+                InstructionType::SingleDataTransfer);
+        }
+
+        #[test]
+        fn block_trans() {
+            assert_eq!(
+                get_instruction_handler(0x0_8_123456).unwrap().get_type(),
+                InstructionType::BlockDataTransfer);
+            assert_eq!(
+                get_instruction_handler(0x0_9_1DFA10).unwrap().get_type(),
+                InstructionType::BlockDataTransfer);
         }
     }
 }
