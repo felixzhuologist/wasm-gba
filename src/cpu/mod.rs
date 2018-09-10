@@ -9,7 +9,8 @@ use self::arm_isa::{
     mul,
     mul_long,
     psr,
-    single_trans
+    single_trans,
+    signed_trans,
 };
 
 enum_from_primitive! {
@@ -55,6 +56,7 @@ pub enum ShiftType {
 }
 }
 
+// TODO: what's the difference between a MUL/MULL/signed swap?
 pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
     let op0 = util::get_nibble(ins, 24);
     let op1 = util::get_nibble(ins, 20);

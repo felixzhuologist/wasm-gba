@@ -5,7 +5,7 @@ pub mod psr;
 pub mod mul;
 pub mod mul_long;
 pub mod single_trans;
-// pub mod signed_trans;
+pub mod signed_trans;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InstructionType {
