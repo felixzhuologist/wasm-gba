@@ -7,6 +7,8 @@ pub mod mul_long;
 pub mod single_trans;
 pub mod signed_trans;
 pub mod block_trans;
+pub mod swap;
+pub mod swi;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InstructionType {
@@ -19,7 +21,8 @@ pub enum InstructionType {
     SingleDataTransfer,
     SignedDataTransfer,
     BlockDataTransfer,
-    Branch
+    Branch,
+    SWInterrupt,
 }
 
 pub enum RegOrImm {

@@ -12,6 +12,8 @@ use self::arm_isa::{
     single_trans,
     signed_trans,
     block_trans,
+    swi,
+    swap
 };
 
 enum_from_primitive! {
@@ -57,7 +59,6 @@ pub enum ShiftType {
 }
 }
 
-// TODO: what's the difference between a MUL/MULL/signed swap?
 pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
     let op0 = util::get_nibble(ins, 24);
     let op1 = util::get_nibble(ins, 20);
@@ -66,8 +67,13 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
         Some(Box::new(mul::Multiply::parse_instruction(ins)))
     } else if op0 == 0 && op1 > 7 && op2 == 0b1001 {
         Some(Box::new(mul_long::MultiplyLong::parse_instruction(ins)))
+    } else if op0 == 1 && op2 == 9 {
+        Some(Box::new(swap::SingleDataSwap::parse_instruction(ins)))
     } else if op0 == 1 && op2 == 1 {
         Some(Box::new(branch_ex::BranchAndExchange::parse_instruction(ins)))
+    } else if op0 < 2 && (op2 == 9 || op2 == 11 || op2 == 13 || op2 == 15) {
+        // if bits 4 and 7 are 1, this must be a signed/hw transfer
+        Some(Box::new(signed_trans::SignedDataTransfer::parse_instruction(ins)))
     } else if op0 < 4 {
         let data = data::DataProc::parse_instruction(ins);
         let op = data.opcode as u8;
@@ -80,8 +86,10 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
         Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
     } else if op0 == 8 || op0 == 9 {
         Some(Box::new(block_trans::BlockDataTransfer::parse_instruction(ins)))
-    }else if op0 == 10 || op0 == 11 {
+    } else if op0 == 10 || op0 == 11 {
         Some(Box::new(branch::Branch::parse_instruction(ins)))
+    } else if op0 == 15 {
+        Some(Box::new(swi::SWInterrupt::parse_instruction(ins)))
     } else {
         None
     }
@@ -313,6 +321,36 @@ mod test {
             assert_eq!(
                 get_instruction_handler(0x0_9_1DFA10).unwrap().get_type(),
                 InstructionType::BlockDataTransfer);
+        }
+
+        #[test]
+        fn sw_interrupt() {
+            assert_eq!(
+                get_instruction_handler(0xFF_123ABC).unwrap().get_type(),
+                InstructionType::SWInterrupt);
+        }
+
+        #[test]
+        fn swap() {
+            assert_eq!(
+                get_instruction_handler(0xF_1_0_123_9_5).unwrap().get_type(),
+                InstructionType::SingleDataSwap);
+            assert_eq!(
+                get_instruction_handler(0xF_1_8_ABC_9_E).unwrap().get_type(),
+                InstructionType::SingleDataSwap);
+        }
+
+        #[test]
+        fn signed_halfword_transfer() {
+            assert_eq!(
+                get_instruction_handler(0xF_1_0BE0_B_3).unwrap().get_type(),
+                InstructionType::SignedDataTransfer);
+            assert_eq!(
+                get_instruction_handler(0xF_0_FABC_D_3).unwrap().get_type(),
+                InstructionType::SignedDataTransfer);
+            assert_eq!(
+                get_instruction_handler(0xF_0_7123_F_3).unwrap().get_type(),
+                InstructionType::SignedDataTransfer);
         }
     }
 }
