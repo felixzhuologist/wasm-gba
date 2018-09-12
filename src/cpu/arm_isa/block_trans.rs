@@ -1,4 +1,4 @@
-use super::{Instruction, InstructionType, RegOrImm};
+use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::util;
 

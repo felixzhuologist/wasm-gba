@@ -31,7 +31,8 @@ impl Instruction for Branch {
     fn get_type(&self) -> InstructionType { InstructionType::Branch }
     fn process_instruction(&self, cpu: &mut CPU) {
         if self.link {
-            cpu.r14 = cpu.r15 - 4;
+            let ret = cpu.get_reg(15) - 4;
+            cpu.set_reg(14, ret);
         }
         let sign_extended = if util::get_bit(self.offset, 23) {
             self.offset | 0xFF000000
@@ -40,7 +41,8 @@ impl Instruction for Branch {
         };
 
         // TODO: is i64 necessary?
-        cpu.r15 = ((cpu.r15 as i64) + (sign_extended << 2) as i64) as u32;
+        let pc = (cpu.get_reg(15) as i64) + (sign_extended << 2) as i64;
+        cpu.set_reg(15, pc as u32);
     }
 }
 

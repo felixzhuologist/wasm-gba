@@ -27,7 +27,8 @@ impl Instruction for BranchAndExchange {
     fn get_type(&self) -> InstructionType { InstructionType::BranchAndExchange }
     fn process_instruction(&self, cpu: &mut CPU) {
         cpu.set_isa(self.switch_to_thumb);
-        cpu.r15 = cpu.r[self.reg];
+        let prev_pc = cpu.get_reg(self.reg);
+        cpu.set_reg(15, prev_pc);
     }
 }
 

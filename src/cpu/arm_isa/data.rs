@@ -64,7 +64,7 @@ impl DataProc {
 impl Instruction for DataProc {
     fn get_type(&self) -> InstructionType { InstructionType::DataProc }
     fn process_instruction(&self, cpu: &mut CPU) {
-        let op1 = cpu.r[self.rn];
+        let op1 = cpu.get_reg(self.rn);
         let (op2, shift_carry) = match self.op2 {
             // TODO: what is carry flag set to when I=1 and a logical op is used?
             RegOrImm::Imm { rotate, value } => (value.rotate_right(rotate * 2), false),
@@ -79,14 +79,14 @@ impl Instruction for DataProc {
             Op::ADD => op1.overflowing_add(op2),
             Op::ADC => {
                 let (r1, c1) = op1.overflowing_add(op2);
-                let (r2, c2) = r1.overflowing_add(cpu.get_c());
+                let (r2, c2) = r1.overflowing_add(cpu.cpsr.c as u32);
                 (r2, c1 || c2)
             },
             Op::SBC => {
                 let (r1, c1) = op1.overflowing_sub(op2);
                 let (r2, c2) = r1.overflowing_sub(1);
                 let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.get_c());
+                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.c as u32);
                 // if we "underflowed" then overflowed, then they cancel out
                 (result, sub_overflow ^ add_overflow)
             },
@@ -94,7 +94,7 @@ impl Instruction for DataProc {
                 let (r1, c1) = op2.overflowing_sub(op1);
                 let (r2, c2) = r1.overflowing_sub(1);
                 let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.get_c());
+                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.c as u32);
                 // if we "underflowed" then overflowed, then they cancel out
                 (result, sub_overflow ^ add_overflow)
             },
@@ -117,7 +117,7 @@ impl Instruction for DataProc {
         };
 
         if should_write {
-            cpu.r[self.rd] = result;
+            cpu.set_reg(self.rd, result);
         }
 
         if !self.set_flags && should_write {
@@ -127,9 +127,9 @@ impl Instruction for DataProc {
         if self.set_flags || !should_write  {
             // TODO: how are we supposed to know if the operands are signed?
             // and detect if the V flag should be set
-            cpu.set_c(carry_out);
-            cpu.set_z(result == 0);
-            cpu.set_n(((result >> 31) & 1) == 1);
+            cpu.cpsr.c = carry_out;
+            cpu.cpsr.z = result == 0;
+            cpu.cpsr.n = ((result >> 31) & 1) == 1;
         }
 
         if self.rd == 15 && self.set_flags {
@@ -145,18 +145,18 @@ pub fn apply_shift(cpu: &mut CPU, shift: u32, reg: u32) -> (u32, bool) {
             if rs == 15 {
                 panic!("cannot use R15 as shift amount");
             }
-            cpu.r[rs as usize] & 0xFF
+            cpu.get_reg(rs as usize) & 0xFF
         },
         (_, false) => shift & 0b11111000,
         _ => panic!("invalid sequence of bits for shift")
     };
 
-    let rm_val = cpu.r[reg as usize];
+    let rm_val = cpu.get_reg(reg as usize);
     // TODO: use enum here?
     match (util::get_bit(shift, 1), util::get_bit(shift, 0)) {
         (false, false) => { // logical shift left
             if shift_amount == 0 {
-                (rm_val, cpu.get_c() == 1)
+                (rm_val, cpu.cpsr.c)
             } else if shift_amount > 32 {
                 (0, false)
             } else {
@@ -181,7 +181,7 @@ pub fn apply_shift(cpu: &mut CPU, shift: u32, reg: u32) -> (u32, bool) {
         },
         (true, false) => { // arithmetic shift right
             if shift_amount == 0 {
-                (rm_val, cpu.get_c() == 1)
+                (rm_val, cpu.cpsr.c)
             } else if shift_amount > 32 {
                 let top_bit = (rm_val >> 31) & 1;
                 (if top_bit == 1 {std::u32::MAX} else {0}, top_bit == 1)
@@ -195,7 +195,7 @@ pub fn apply_shift(cpu: &mut CPU, shift: u32, reg: u32) -> (u32, bool) {
         (true, true) => {
             // RSR #0 is used to encode RRX
             if shift_amount == 0 {
-                let result = (rm_val >> 1) | (cpu.get_c() << 31);
+                let result = (rm_val >> 1) | ((cpu.cpsr.c as u32) << 31);
                 (result, (rm_val & 1) == 1)
             } else {
                 let result = rm_val.rotate_right(shift_amount);

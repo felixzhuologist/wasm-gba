@@ -1,6 +1,5 @@
 use super::{Instruction, InstructionType};
 use ::cpu::CPU;
-use ::util;
 
 /// Cause a software interrupt trap to be taken, which switches to Supervisor mode,
 /// changes the PC to a fixed value (0x08), and saves the CPSR

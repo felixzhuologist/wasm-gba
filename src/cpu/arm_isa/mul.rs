@@ -42,14 +42,14 @@ impl Instruction for Multiply {
         }
         // since we only care about the bottom 32 bits, this will be the same
         // for both signed and unsigned integers
-        let mut result: u64 = (cpu.r[self.rm] as u64) * (cpu.r[self.rn] as u64);
+        let mut result: u64 = (cpu.get_reg(self.rm) as u64) * (cpu.get_reg(self.rn) as u64);
         if self.accumulate {
-            result += cpu.r[self.rs] as u64;
+            result += cpu.get_reg(self.rs) as u64;
         }
-        cpu.r[self.rd] = result as u32;
+        cpu.set_reg(self.rd, result as u32);
         if self.set_flags {
-            cpu.set_n(((result >> 31) & 1) == 1);
-            cpu.set_z(result == 0);
+            cpu.cpsr.n = ((result >> 31) & 1) == 1;
+            cpu.cpsr.z = result == 0;
         }
     }
 }

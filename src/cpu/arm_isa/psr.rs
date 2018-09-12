@@ -66,15 +66,15 @@ impl Instruction for PSRTransfer {
         match self.trans {
             TransferType::Read { ref stype, ref dest } => {
                 let val = match stype {
-                    StateRegType::Current => cpu.get_cpsr(),
-                    StateRegType::Saved => cpu.get_spsr()
+                    StateRegType::Current => cpu.cpsr.to_u32(),
+                    StateRegType::Saved => cpu.get_spsr().to_u32()
                 };
-                cpu.r[*dest as usize] = val;
+                cpu.set_reg(*dest as usize, val);
             },
             TransferType::Write { ref stype, ref source } => {
                 let val = match source {
                     RegOrImm::Imm { ref rotate, ref value } => value.rotate_right(*rotate),
-                    RegOrImm::Reg { shift: _, ref reg } => cpu.r[*reg as usize]
+                    RegOrImm::Reg { shift: _, ref reg } => cpu.get_reg(*reg as usize)
                 };
                 match stype {
                     StateRegType::Current => cpu.set_cpsr(val),

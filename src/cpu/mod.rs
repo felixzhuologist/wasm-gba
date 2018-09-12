@@ -1,4 +1,5 @@
 pub mod arm_isa;
+pub mod status_reg;
 
 use num::FromPrimitive;
 use util;
@@ -15,6 +16,7 @@ use self::arm_isa::{
     swi,
     swap
 };
+use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
 enum_from_primitive! {
 #[repr(u8)]
@@ -34,28 +36,6 @@ pub enum CondField {
     GT,
     LE,
     AL
-}
-}
-
-#[derive(PartialEq)]
-#[repr(u8)]
-pub enum ProcessorMode {
-    USR = 0b10000,
-    FIQ = 0b10001,
-    IRQ = 0b10010,
-    SVC = 0b10011,
-    ABT = 0b10111,
-    UND = 0b11011,
-    SYS = 0b11111
-}
-
-enum_from_primitive! {
-#[repr(u8)]
-pub enum ShiftType {
-    LSL = 0,
-    LSR,
-    ASR,
-    RSR
 }
 }
 
@@ -96,8 +76,13 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
 }
 
 pub struct CPU {
-    /// r0-r12 are general purpose registers
-    r: [u32; 13],
+    /// r0-r12 are general purpose registers,
+    /// r13 is typically the stack pointer, but can be used as a general purpose
+    /// register if the stack pointer isn't necessary,
+    /// r14 is the link register (for storing addressses to jump back to)/a
+    /// general purpose register, and r15 is the PC pointing to address + 8 of
+    /// the current instruction
+    r: [u32; 16],
     /// R8-R14 are banked in FIQ mode
     r_fiq: [u32; 7],
     /// R13-R14 are banked in IRQ mode
@@ -108,73 +93,75 @@ pub struct CPU {
     r_abt: [u32; 2],
     /// R13-R14 are banked in SVC mode
     r_svc: [u32; 2],
-    /// r13 is typically the stack pointer, but can be used as a general purpose
-    /// register if the stack pointer isn't necessary 
-    r13: u32,
-    /// link register
-    r14: u32,
-    /// pc pointing to address + 8 of the current instruction
-    r15: u32,
-    /// current processor status register
-    /// bits: [N, Z, C, V, ... I, F, T, M4, M3, M2, M1, M0]
-    /// flag | logical instruction     | arithmetic instruction
-    ///  N   | none                    | bit 31 of the result has been set
-    ///  Z   | result is 0             | result is 0
-    ///  C   | carry flag after shift  | result was > than 32 bits
-    ///  V   | none                    | result was > 31 bits 
-    cpsr: u32,
+
+    /// program state registers
+    cpsr: PSR,
     /// banked SPSR registers
-    spsr_svc: u32,
-    spsr_abt: u32,
-    spsr_und: u32,
-    spsr_irq: u32,
-    spsr_fiq: u32
+    spsr_svc: PSR,
+    spsr_abt: PSR,
+    spsr_und: PSR,
+    spsr_irq: PSR,
+    spsr_fiq: PSR
 }
 
 impl CPU {
-    /// negative result from ALU flag
-    fn get_n(&self) -> u32 {
-        self.cpsr >> 31
+    pub fn new() -> CPU {
+        CPU {
+            r: [0; 16],
+            r_fiq: [0; 7],
+            r_irq: [0; 2],
+            r_und: [0, 2],
+            r_abt: [0, 2],
+            r_svc: [0, 2],
+
+            cpsr: PSR::new(),
+            spsr_svc: PSR::new(),
+            spsr_abt: PSR::new(),
+            spsr_und: PSR::new(),
+            spsr_irq: PSR::new(),
+            spsr_fiq: PSR::new(),
+        }
+    }
+    pub fn get_reg(&self, reg: usize) -> u32 {
+        match reg {
+            15 |
+            0 ... 7 => self.r[reg],
+            8 ... 12 => match self.cpsr.mode {
+                ProcessorMode::FIQ => self.r_fiq[reg - 8],
+                _ => self.r[reg]
+            },
+            13 ... 14 => match self.cpsr.mode {
+                ProcessorMode::USR |
+                ProcessorMode::SYS => self.r[reg],
+                ProcessorMode::FIQ => self.r_fiq[reg - 8],
+                ProcessorMode::IRQ => self.r_irq[reg - 13],
+                ProcessorMode::UND => self.r_und[reg - 13],
+                ProcessorMode::ABT => self.r_abt[reg - 13],
+                ProcessorMode::SVC => self.r_svc[reg - 13],
+            },
+            _ => panic!("tried to access register {}", reg)
+        }
     }
 
-    fn set_n(&mut self, val: bool) {
-        unimplemented!()
-    }
-
-    fn get_mode(&self) -> ProcessorMode {
-        unimplemented!()
-    }
-
-    /// zero result from ALU flag
-    fn get_z(&self) -> u32 {
-        (self.cpsr >> 30) & 1
-    }
-
-    fn set_z(&mut self, val: bool) {
-        unimplemented!()
-    }
-
-    /// ALU operation carried out
-    fn get_c(&self) -> u32 {
-        (self.cpsr >> 29) & 1
-    }
-
-    fn set_c(&mut self, val: bool) {
-        // TODO: separate out cspr values?
-        unimplemented!()
-    }
-
-    /// ALU operation overflowed
-    fn get_v(&self) -> u32 {
-        (self.cpsr >> 28) & 1
-    }
-
-    fn set_v(&mut self, val: bool) {
-        unimplemented!()
-    }
-
-    fn get_cpsr(&self) -> u32 {
-        unimplemented!()
+    pub fn set_reg(&mut self, reg: usize, val: u32) {
+        match reg {
+            15 |
+            0 ... 7 => self.r[reg] = val,
+            8 ... 12 => match self.cpsr.mode {
+                ProcessorMode::FIQ => self.r_fiq[reg - 8] = val,
+                _ => self.r[reg] = val
+            },
+            13 ... 14 => match self.cpsr.mode {
+                ProcessorMode::USR |
+                ProcessorMode::SYS => self.r[reg] = val,
+                ProcessorMode::FIQ => self.r_fiq[reg - 8] = val,
+                ProcessorMode::IRQ => self.r_irq[reg - 13] = val,
+                ProcessorMode::UND => self.r_und[reg - 13] = val,
+                ProcessorMode::ABT => self.r_abt[reg - 13] = val,
+                ProcessorMode::SVC => self.r_svc[reg - 13] = val,
+            },
+            _ => panic!("tried to set register {}", reg)
+        };
     }
 
     /// restore CPSR to the SPSR for the current mode
@@ -183,10 +170,10 @@ impl CPU {
     }
 
     fn set_cpsr(&mut self, val: u32) {
-        unimplemented!()
+        self.cpsr.from_u32(val);
     }
 
-    fn get_spsr(&self) -> u32 {
+    fn get_spsr(&self) -> PSR {
         unimplemented!()
     }
 
@@ -197,25 +184,25 @@ impl CPU {
 
     // TODO: how should this function look? should we have an enum for ARM/THUMB?
     fn set_isa(&mut self, thumb: bool) {
-        unimplemented!()
+        self.cpsr.t = if thumb { CPUMode::THUMB } else { CPUMode::ARM };
     }
 
     fn satisfies_cond(&self, cond: u32) -> bool {
         match CondField::from_u32(cond).unwrap() {
-            CondField::EQ => self.get_z() == 1,
-            CondField::NE => self.get_z() == 0,
-            CondField::CS => self.get_c() == 1,
-            CondField::CC => self.get_c() == 0,
-            CondField::MI => self.get_n() == 1,
-            CondField::PL => self.get_n() == 0,
-            CondField::VS => self.get_v() == 1,
-            CondField::VC => self.get_v() == 0,
-            CondField::HI => self.get_c() == 1 && self.get_v() == 0,
-            CondField::LS => self.get_c() == 0 || self.get_v() == 1,
-            CondField::GE => self.get_n() == self.get_v(),
-            CondField::LT => self.get_n() != self.get_v(),
-            CondField::GT => self.get_z() == 0 && (self.get_n() == self.get_v()),
-            CondField::LE => self.get_z() == 1 || (self.get_n() != self.get_v()),
+            CondField::EQ => self.cpsr.z,
+            CondField::NE => !self.cpsr.z,
+            CondField::CS => self.cpsr.c,
+            CondField::CC => !self.cpsr.c,
+            CondField::MI => self.cpsr.n,
+            CondField::PL => !self.cpsr.n,
+            CondField::VS => self.cpsr.v,
+            CondField::VC => !self.cpsr.v,
+            CondField::HI => self.cpsr.c && !self.cpsr.v,
+            CondField::LS => !self.cpsr.c || self.cpsr.v,
+            CondField::GE => self.cpsr.n == self.cpsr.v,
+            CondField::LT => self.cpsr.n != self.cpsr.v,
+            CondField::GT => !self.cpsr.z && (self.cpsr.n == self.cpsr.v),
+            CondField::LE => self.cpsr.z || (self.cpsr.n != self.cpsr.v),
             CondField::AL => true
         }
     }

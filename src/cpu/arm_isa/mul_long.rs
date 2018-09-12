@@ -42,19 +42,19 @@ impl Instruction for MultiplyLong {
         if self.rm == 15 || self.rs == 15 || self.rdhi == 15 || self.rdlo == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }
-        if self.rdhi == self.rdlo || self.rdhi == self.rm || self.rdlo == self.rm {
+        if self.rdhi == self.rdlo ||  self.rdhi == self.rm || self.rdlo == self.rm {
             panic!("RdHi, RdLo, and Rm must all specify different registers");
         }
 
-        let summand = ((cpu.r[self.rdhi] as u64) << 32) | (cpu.r[self.rdlo] as u64);
+        let summand = ((cpu.get_reg(self.rdhi) as u64) << 32) | (cpu.get_reg(self.rdlo) as u64);
         let result = if self.is_signed {
-            let mut prod: i64 = (cpu.r[self.rm] as i64) * (cpu.r[self.rs] as i64);
+            let mut prod: i64 = (cpu.get_reg(self.rm) as i64) * (cpu.get_reg(self.rs) as i64);
             if self.accumulate {
                 prod += summand as i64
             }
             prod as u64
         } else {
-            let mut prod: u64 = (cpu.r[self.rm] as u64) * (cpu.r[self.rs] as u64);
+            let mut prod: u64 = (cpu.get_reg(self.rm) as u64) * (cpu.get_reg(self.rs) as u64);
             if self.accumulate {
                 prod += summand
             }
@@ -63,11 +63,11 @@ impl Instruction for MultiplyLong {
 
         let top = (result >> 32) as u32;
         let bot = result as u32;
-        cpu.r[self.rdhi] = top;
-        cpu.r[self.rdlo] = bot;
+        cpu.set_reg(self.rdhi, top);
+        cpu.set_reg(self.rdlo, bot);
         if self.set_flags {
-            cpu.set_n(((top >> 31) & 1) == 1);
-            cpu.set_z(result == 0);
+            cpu.cpsr.n = ((top >> 31) & 1) == 1;
+            cpu.cpsr.z = result == 0;
         }
     }
 }
