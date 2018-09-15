@@ -14,99 +14,109 @@ use self::arm_isa::{
     signed_trans,
     block_trans,
     swi,
-    swap
+    swap,
+    Noop,
 };
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
-enum_from_primitive! {
-#[repr(u8)]
-pub enum CondField {
-    EQ = 0,
-    NE,
-    CS,
-    CC,
-    MI,
-    PL,
-    VS,
-    VC,
-    HI,
-    LS,
-    GE,
-    LT,
-    GT,
-    LE,
-    AL
-}
-}
-
-pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
-    let op0 = util::get_nibble(ins, 24);
-    let op1 = util::get_nibble(ins, 20);
-    let op2 = util::get_nibble(ins, 4);
-    if op0 == 0 && op1 < 4 && op2 == 0b1001 {
-        Some(Box::new(mul::Multiply::parse_instruction(ins)))
-    } else if op0 == 0 && op1 > 7 && op2 == 0b1001 {
-        Some(Box::new(mul_long::MultiplyLong::parse_instruction(ins)))
-    } else if op0 == 1 && op2 == 9 {
-        Some(Box::new(swap::SingleDataSwap::parse_instruction(ins)))
-    } else if op0 == 1 && op2 == 1 {
-        Some(Box::new(branch_ex::BranchAndExchange::parse_instruction(ins)))
-    } else if op0 < 2 && (op2 == 9 || op2 == 11 || op2 == 13 || op2 == 15) {
-        // if bits 4 and 7 are 1, this must be a signed/hw transfer
-        Some(Box::new(signed_trans::SignedDataTransfer::parse_instruction(ins)))
-    } else if op0 < 4 {
-        let data = data::DataProc::parse_instruction(ins);
-        let op = data.opcode as u8;
-        if !data.set_flags && op > 7 && op < 12 {
-            Some(Box::new(psr::PSRTransfer::parse_instruction(ins)))
-        } else {
-            Some(Box::new(data))
-        }
-    } else if op0 >= 4 && op0 < 8 {
-        Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
-    } else if op0 == 8 || op0 == 9 {
-        Some(Box::new(block_trans::BlockDataTransfer::parse_instruction(ins)))
-    } else if op0 == 10 || op0 == 11 {
-        Some(Box::new(branch::Branch::parse_instruction(ins)))
-    } else if op0 == 15 {
-        Some(Box::new(swi::SWInterrupt::parse_instruction(ins)))
-    } else {
-        None
-    }
-}
-
 pub struct CPU {
-    /// r0-r12 are general purpose registers,
-    /// r13 is typically the stack pointer, but can be used as a general purpose
-    /// register if the stack pointer isn't necessary,
-    /// r14 is the link register (for storing addressses to jump back to)/a
-    /// general purpose register, and r15 is the PC pointing to address + 8 of
-    /// the current instruction
-    r: [u32; 16],
-    /// R8-R14 are banked in FIQ mode
-    r_fiq: [u32; 7],
-    /// R13-R14 are banked in IRQ mode
-    r_irq: [u32; 2],
-    /// R13-R14 are banked in UND mode
-    r_und: [u32; 2],
-    /// R13-R14 are banked in ABT mode
-    r_abt: [u32; 2],
-    /// R13-R14 are banked in SVC mode
-    r_svc: [u32; 2],
-
-    /// program state registers
-    cpsr: PSR,
-    /// banked SPSR registers
-    spsr_svc: PSR,
-    spsr_abt: PSR,
-    spsr_und: PSR,
-    spsr_irq: PSR,
-    spsr_fiq: PSR
+    regs: Registers,
+    /// since we only need to keep track of the last 3 elements
+    /// of the pipeline at a time (the latest fetched instruction, the latest
+    /// decoded instruction, and the next decoded instruction to execute), we
+    /// use a circular buffer of size 3
+    pipeline: [PipelineInstruction; 3],
+    /// index into the circular buffer
+    idx: usize,
+    /// flush the pipeline before the start of the next cycle. this computation
+    /// is "delayed" mainly to avoid fighting the borrow checker
+    should_flush: bool
 }
 
 impl CPU {
+    /// Initialize CPU values assuming boot from GBA BIOS. In particular, with
+    /// all regs zeroed out, and with CPSR in ARM and SVC modes with IRQ/FIQ bits
+    /// set.
     pub fn new() -> CPU {
-        CPU {
+        let mut cpu = CPU {
+            regs: Registers::new(),
+            pipeline: [
+                PipelineInstruction::Empty,
+                PipelineInstruction::Empty,
+                PipelineInstruction::Empty,
+            ],
+            idx: 0,
+            should_flush: false
+        };
+        cpu.regs.cpsr.i = false;
+        cpu.regs.cpsr.f = false;
+        cpu.regs.cpsr.mode = ProcessorMode:: SVC;
+
+        cpu
+    }
+
+    fn satisfies_cond(&self, cond: u32) -> bool {
+        let cpsr = &self.regs.cpsr;
+        match CondField::from_u32(cond).unwrap() {
+            CondField::EQ => cpsr.z,
+            CondField::NE => !cpsr.z,
+            CondField::CS => cpsr.c,
+            CondField::CC => !cpsr.c,
+            CondField::MI => cpsr.n,
+            CondField::PL => !cpsr.n,
+            CondField::VS => cpsr.v,
+            CondField::VC => !cpsr.v,
+            CondField::HI => cpsr.c && !cpsr.v,
+            CondField::LS => !cpsr.c || cpsr.v,
+            CondField::GE => cpsr.n == cpsr.v,
+            CondField::LT => cpsr.n != cpsr.v,
+            CondField::GT => !cpsr.z && (cpsr.n == cpsr.v),
+            CondField::LE => cpsr.z || (cpsr.n != cpsr.v),
+            CondField::AL => true
+        }
+    }
+
+    pub fn fetch(&mut self) {
+        // self.pipeline[idx] = ...
+        // self.idx = (self.idx + 1) % 3;
+        unimplemented!()
+    }
+
+    /// decode the next instruction. if the condition of the instruction isn't met,
+    /// the raw instruction is decoded as a Noop
+    pub fn decode(&mut self) {
+        // index of the second element from the end
+        let idx = ((self.idx as i8 - 2 as i8) % 3) as usize;
+        if let PipelineInstruction::Raw(n) = self.pipeline[idx] {
+            let cond = util::get_nibble(n, 28);
+            self.pipeline[idx] = PipelineInstruction::Decoded(
+                if self.satisfies_cond(cond) {
+                    get_instruction_handler(n).unwrap()
+                } else {
+                    Box::new(Noop { })
+                })
+        }
+    }
+
+    pub fn execute(&mut self) {
+        // index of the third element from the end
+        let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
+        if let PipelineInstruction::Decoded(ref mut ins) = self.pipeline[idx] {
+            ins.process_instruction(&mut self.regs);
+        }
+    }
+
+    pub fn flush_pipeline(&mut self) {
+        for i in 0..3 {
+            self.pipeline[i] = PipelineInstruction::Empty;
+        }
+        self.idx = 0;
+    }
+}
+
+impl Registers {
+    pub fn new() -> Registers {
+        Registers {
             r: [0; 16],
             r_fiq: [0; 7],
             r_irq: [0; 2],
@@ -122,6 +132,7 @@ impl CPU {
             spsr_fiq: PSR::new(),
         }
     }
+
     pub fn get_reg(&self, reg: usize) -> u32 {
         match reg {
             15 |
@@ -182,43 +193,107 @@ impl CPU {
         unimplemented!()
     }
 
-    // TODO: how should this function look? should we have an enum for ARM/THUMB?
     fn set_isa(&mut self, thumb: bool) {
         self.cpsr.t = if thumb { CPUMode::THUMB } else { CPUMode::ARM };
     }
+}
 
-    fn satisfies_cond(&self, cond: u32) -> bool {
-        match CondField::from_u32(cond).unwrap() {
-            CondField::EQ => self.cpsr.z,
-            CondField::NE => !self.cpsr.z,
-            CondField::CS => self.cpsr.c,
-            CondField::CC => !self.cpsr.c,
-            CondField::MI => self.cpsr.n,
-            CondField::PL => !self.cpsr.n,
-            CondField::VS => self.cpsr.v,
-            CondField::VC => !self.cpsr.v,
-            CondField::HI => self.cpsr.c && !self.cpsr.v,
-            CondField::LS => !self.cpsr.c || self.cpsr.v,
-            CondField::GE => self.cpsr.n == self.cpsr.v,
-            CondField::LT => self.cpsr.n != self.cpsr.v,
-            CondField::GT => !self.cpsr.z && (self.cpsr.n == self.cpsr.v),
-            CondField::LE => self.cpsr.z || (self.cpsr.n != self.cpsr.v),
-            CondField::AL => true
+pub struct Registers {
+    /// r0-r12 are general purpose registers,
+    /// r13 is typically the stack pointer, but can be used as a general purpose
+    /// register if the stack pointer isn't necessary,
+    /// r14 is the link register (for storing addressses to jump back to)/a
+    /// general purpose register, and r15 is the PC pointing to address + 8 of
+    /// the current instruction
+    r: [u32; 16],
+    /// R8-R14 are banked in FIQ mode
+    r_fiq: [u32; 7],
+    /// R13-R14 are banked in IRQ mode
+    r_irq: [u32; 2],
+    /// R13-R14 are banked in UND mode
+    r_und: [u32; 2],
+    /// R13-R14 are banked in ABT mode
+    r_abt: [u32; 2],
+    /// R13-R14 are banked in SVC mode
+    r_svc: [u32; 2],
+
+    /// program state registers
+    cpsr: PSR,
+    /// banked SPSR registers
+    spsr_svc: PSR,
+    spsr_abt: PSR,
+    spsr_und: PSR,
+    spsr_irq: PSR,
+    spsr_fiq: PSR,
+}
+
+/// An instruction in a specific stage of the ARM7's three stage pipeline
+pub enum PipelineInstruction {
+    /// A not yet fetched instruction. This is a placeholder for when the
+    /// pipeline has just been flushed and the CPU is stalling waiting for the
+    /// next instruction to be fetched
+    Empty,
+    /// A fetched instruction. This could either be a 32bit ARM instruction or
+    /// a 16 bit THUMB instruction
+    Raw(u32),
+    /// A decoded instruction
+    Decoded(Box<arm_isa::Instruction>)
+}
+
+enum_from_primitive! {
+#[repr(u8)]
+pub enum CondField {
+    EQ = 0,
+    NE,
+    CS,
+    CC,
+    MI,
+    PL,
+    VS,
+    VC,
+    HI,
+    LS,
+    GE,
+    LT,
+    GT,
+    LE,
+    AL
+}
+}
+
+pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
+    let op0 = util::get_nibble(ins, 24);
+    let op1 = util::get_nibble(ins, 20);
+    let op2 = util::get_nibble(ins, 4);
+    if op0 == 0 && op1 < 4 && op2 == 0b1001 {
+        Some(Box::new(mul::Multiply::parse_instruction(ins)))
+    } else if op0 == 0 && op1 > 7 && op2 == 0b1001 {
+        Some(Box::new(mul_long::MultiplyLong::parse_instruction(ins)))
+    } else if op0 == 1 && op2 == 9 {
+        Some(Box::new(swap::SingleDataSwap::parse_instruction(ins)))
+    } else if op0 == 1 && op2 == 1 {
+        Some(Box::new(branch_ex::BranchAndExchange::parse_instruction(ins)))
+    } else if op0 < 2 && (op2 == 9 || op2 == 11 || op2 == 13 || op2 == 15) {
+        // if bits 4 and 7 are 1, this must be a signed/hw transfer
+        Some(Box::new(signed_trans::SignedDataTransfer::parse_instruction(ins)))
+    } else if op0 < 4 {
+        let data = data::DataProc::parse_instruction(ins);
+        let op = data.opcode as u8;
+        if !data.set_flags && op > 7 && op < 12 {
+            Some(Box::new(psr::PSRTransfer::parse_instruction(ins)))
+        } else {
+            Some(Box::new(data))
         }
-    }
-
-    pub fn process_arm_instruction(&mut self, ins: u32) {
-        let cond = util::get_nibble(ins, 28);
-        if !self.satisfies_cond(cond) {
-            return;
-        }
-
-        // it is redundant to pass the same instruction twice but separating
-        // this out lets us test the two separate behaviours of picking the
-        // right instruction handler, and that the given instruction handler
-        // does the right thing.
-        get_instruction_handler(ins).unwrap()
-            .process_instruction(self);
+    } else if op0 >= 4 && op0 < 8 {
+        Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
+    } else if op0 == 8 || op0 == 9 {
+        Some(Box::new(block_trans::BlockDataTransfer::parse_instruction(ins)))
+    } else if op0 == 10 || op0 == 11 {
+        Some(Box::new(branch::Branch::parse_instruction(ins)))
+    } else if op0 == 15 {
+        Some(Box::new(swi::SWInterrupt::parse_instruction(ins)))
+    } else {
+        None
     }
 }
 

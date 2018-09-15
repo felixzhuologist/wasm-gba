@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType, RegOrImm};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 pub enum StateRegType {
@@ -62,23 +62,23 @@ impl PSRTransfer {
 
 impl Instruction for PSRTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::PSRTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         match self.trans {
             TransferType::Read { ref stype, ref dest } => {
                 let val = match stype {
-                    StateRegType::Current => cpu.cpsr.to_u32(),
-                    StateRegType::Saved => cpu.get_spsr().to_u32()
+                    StateRegType::Current => regs.cpsr.to_u32(),
+                    StateRegType::Saved => regs.get_spsr().to_u32()
                 };
-                cpu.set_reg(*dest as usize, val);
+                regs.set_reg(*dest as usize, val);
             },
             TransferType::Write { ref stype, ref source } => {
                 let val = match source {
                     RegOrImm::Imm { ref rotate, ref value } => value.rotate_right(*rotate),
-                    RegOrImm::Reg { shift: _, ref reg } => cpu.get_reg(*reg as usize)
+                    RegOrImm::Reg { shift: _, ref reg } => regs.get_reg(*reg as usize)
                 };
                 match stype {
-                    StateRegType::Current => cpu.set_cpsr(val),
-                    StateRegType::Saved => cpu.set_spsr(val)
+                    StateRegType::Current => regs.set_cpsr(val),
+                    StateRegType::Saved => regs.set_spsr(val)
                 }
             }
         }

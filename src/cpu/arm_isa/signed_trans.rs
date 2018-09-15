@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType, RegOrImm};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// Load or store a half words of data from memory and also load sign-extended
@@ -57,7 +57,7 @@ impl SignedDataTransfer {
 
 impl Instruction for SignedDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::SignedDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         unimplemented!()
     }
 }

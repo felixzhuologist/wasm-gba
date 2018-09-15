@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// The multiply and multiply-accumulate instructions perform integer multiplication
@@ -38,7 +38,7 @@ impl MultiplyLong {
 
 impl Instruction for MultiplyLong {
     fn get_type(&self) -> InstructionType { InstructionType::MultiplyLong }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         if self.rm == 15 || self.rs == 15 || self.rdhi == 15 || self.rdlo == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }
@@ -46,15 +46,15 @@ impl Instruction for MultiplyLong {
             panic!("RdHi, RdLo, and Rm must all specify different registers");
         }
 
-        let summand = ((cpu.get_reg(self.rdhi) as u64) << 32) | (cpu.get_reg(self.rdlo) as u64);
+        let summand = ((regs.get_reg(self.rdhi) as u64) << 32) | (regs.get_reg(self.rdlo) as u64);
         let result = if self.is_signed {
-            let mut prod: i64 = (cpu.get_reg(self.rm) as i64) * (cpu.get_reg(self.rs) as i64);
+            let mut prod: i64 = (regs.get_reg(self.rm) as i64) * (regs.get_reg(self.rs) as i64);
             if self.accumulate {
                 prod += summand as i64
             }
             prod as u64
         } else {
-            let mut prod: u64 = (cpu.get_reg(self.rm) as u64) * (cpu.get_reg(self.rs) as u64);
+            let mut prod: u64 = (regs.get_reg(self.rm) as u64) * (regs.get_reg(self.rs) as u64);
             if self.accumulate {
                 prod += summand
             }
@@ -63,11 +63,11 @@ impl Instruction for MultiplyLong {
 
         let top = (result >> 32) as u32;
         let bot = result as u32;
-        cpu.set_reg(self.rdhi, top);
-        cpu.set_reg(self.rdlo, bot);
+        regs.set_reg(self.rdhi, top);
+        regs.set_reg(self.rdlo, bot);
         if self.set_flags {
-            cpu.cpsr.n = ((top >> 31) & 1) == 1;
-            cpu.cpsr.z = result == 0;
+            regs.cpsr.n = ((top >> 31) & 1) == 1;
+            regs.cpsr.z = result == 0;
         }
     }
 }

@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// This instruction performs a branch by copying the contents of a single register
@@ -25,10 +25,10 @@ impl BranchAndExchange {
 
 impl Instruction for BranchAndExchange {
     fn get_type(&self) -> InstructionType { InstructionType::BranchAndExchange }
-    fn process_instruction(&self, cpu: &mut CPU) {
-        cpu.set_isa(self.switch_to_thumb);
-        let prev_pc = cpu.get_reg(self.reg);
-        cpu.set_reg(15, prev_pc);
+    fn process_instruction(&self, regs: &mut Registers) {
+        regs.set_isa(self.switch_to_thumb);
+        let prev_pc = regs.get_reg(self.reg);
+        regs.set_reg(15, prev_pc);
     }
 }
 

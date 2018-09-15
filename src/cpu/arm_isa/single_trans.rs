@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType, RegOrImm};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// Load or store a single byte/word to/from memory. The memory address is
@@ -53,7 +53,7 @@ impl SingleDataTransfer {
 
 impl Instruction for SingleDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::SingleDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         unimplemented!()
     }
 }

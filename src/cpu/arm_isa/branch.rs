@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// This instruction specifies a jump of +/- 32Mbytes. The branch offset must take
@@ -29,10 +29,10 @@ impl Branch {
 
 impl Instruction for Branch {
     fn get_type(&self) -> InstructionType { InstructionType::Branch }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         if self.link {
-            let ret = cpu.get_reg(15) - 4;
-            cpu.set_reg(14, ret);
+            let ret = regs.get_reg(15) - 4;
+            regs.set_reg(14, ret);
         }
         let sign_extended = if util::get_bit(self.offset, 23) {
             self.offset | 0xFF000000
@@ -41,8 +41,8 @@ impl Instruction for Branch {
         };
 
         // TODO: is i64 necessary?
-        let pc = (cpu.get_reg(15) as i64) + (sign_extended << 2) as i64;
-        cpu.set_reg(15, pc as u32);
+        let pc = (regs.get_reg(15) as i64) + (sign_extended << 2) as i64;
+        regs.set_reg(15, pc as u32);
     }
 }
 

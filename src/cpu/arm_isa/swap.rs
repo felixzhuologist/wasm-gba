@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// Swap a byte or word between a register and external memory "atomically"
@@ -29,7 +29,7 @@ impl SingleDataSwap {
 
 impl Instruction for SingleDataSwap {
     fn get_type(&self) -> InstructionType { InstructionType::SingleDataSwap }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         unimplemented!()
     }
 }

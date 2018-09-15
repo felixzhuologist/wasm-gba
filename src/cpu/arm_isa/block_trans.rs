@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::CPU;
+use ::cpu::Registers;
 use ::util;
 
 /// Load or store any subset of the currently visible registers
@@ -38,7 +38,7 @@ impl BlockDataTransfer {
 
 impl Instruction for BlockDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::BlockDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn process_instruction(&self, regs: &mut Registers) {
         unimplemented!()
     }
 }

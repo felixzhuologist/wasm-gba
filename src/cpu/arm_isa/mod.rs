@@ -23,6 +23,7 @@ pub enum InstructionType {
     BlockDataTransfer,
     Branch,
     SWInterrupt,
+    Noop
 }
 
 pub enum RegOrImm {
@@ -31,8 +32,14 @@ pub enum RegOrImm {
 }
 
 pub trait Instruction {
-    fn process_instruction(&self, cpu: &mut super::CPU);
+    fn process_instruction(&self, regs: &mut super::Registers);
     /// return an enum indicating the instruction type. Used during testing
     /// to recover the instruction type 
     fn get_type(&self) -> InstructionType;
+}
+
+pub struct Noop { }
+impl Instruction for Noop {
+    fn process_instruction(&self, _regs: &mut super::Registers) { }
+    fn get_type(&self) -> InstructionType { InstructionType::Noop }
 }
