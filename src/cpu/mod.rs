@@ -20,17 +20,16 @@ use self::arm_isa::{
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
 pub struct CPU {
+    // this is a separate field to allow for splitting borrow on CPU.pipeline
+    // and the rest of the CPU fields
     regs: Registers,
-    /// since we only need to keep track of the last 3 elements
-    /// of the pipeline at a time (the latest fetched instruction, the latest
-    /// decoded instruction, and the next decoded instruction to execute), we
-    /// use a circular buffer of size 3
+    // since we only need to keep track of the last 3 elements
+    // of the pipeline at a time (the latest fetched instruction, the latest
+    // decoded instruction, and the next decoded instruction to execute), we
+    // use a circular buffer of size 3
     pipeline: [PipelineInstruction; 3],
-    /// index into the circular buffer
+    // index into the circular buffer
     idx: usize,
-    /// flush the pipeline before the start of the next cycle. this computation
-    /// is "delayed" mainly to avoid fighting the borrow checker
-    should_flush: bool
 }
 
 impl CPU {
@@ -46,7 +45,6 @@ impl CPU {
                 PipelineInstruction::Empty,
             ],
             idx: 0,
-            should_flush: false
         };
         cpu.regs.cpsr.i = false;
         cpu.regs.cpsr.f = false;
@@ -114,6 +112,39 @@ impl CPU {
     }
 }
 
+pub struct Registers {
+    /// r0-r12 are general purpose registers,
+    /// r13 is typically the stack pointer, but can be used as a general purpose
+    /// register if the stack pointer isn't necessary,
+    /// r14 is the link register (for storing addressses to jump back to)/a
+    /// general purpose register, and r15 is the PC pointing to address + 8 of
+    /// the current instruction
+    r: [u32; 16],
+    /// R8-R14 are banked in FIQ mode
+    r_fiq: [u32; 7],
+    /// R13-R14 are banked in IRQ mode
+    r_irq: [u32; 2],
+    /// R13-R14 are banked in UND mode
+    r_und: [u32; 2],
+    /// R13-R14 are banked in ABT mode
+    r_abt: [u32; 2],
+    /// R13-R14 are banked in SVC mode
+    r_svc: [u32; 2],
+
+    /// program state registers
+    cpsr: PSR,
+    /// banked SPSR registers
+    spsr_svc: PSR,
+    spsr_abt: PSR,
+    spsr_und: PSR,
+    spsr_irq: PSR,
+    spsr_fiq: PSR,
+
+    // flush the pipeline before the start of the next cycle
+    // TODO: put this somewhere else?
+    should_flush: bool
+}
+
 impl Registers {
     pub fn new() -> Registers {
         Registers {
@@ -130,6 +161,8 @@ impl Registers {
             spsr_und: PSR::new(),
             spsr_irq: PSR::new(),
             spsr_fiq: PSR::new(),
+
+            should_flush: false
         }
     }
 
@@ -196,35 +229,6 @@ impl Registers {
     fn set_isa(&mut self, thumb: bool) {
         self.cpsr.t = if thumb { CPUMode::THUMB } else { CPUMode::ARM };
     }
-}
-
-pub struct Registers {
-    /// r0-r12 are general purpose registers,
-    /// r13 is typically the stack pointer, but can be used as a general purpose
-    /// register if the stack pointer isn't necessary,
-    /// r14 is the link register (for storing addressses to jump back to)/a
-    /// general purpose register, and r15 is the PC pointing to address + 8 of
-    /// the current instruction
-    r: [u32; 16],
-    /// R8-R14 are banked in FIQ mode
-    r_fiq: [u32; 7],
-    /// R13-R14 are banked in IRQ mode
-    r_irq: [u32; 2],
-    /// R13-R14 are banked in UND mode
-    r_und: [u32; 2],
-    /// R13-R14 are banked in ABT mode
-    r_abt: [u32; 2],
-    /// R13-R14 are banked in SVC mode
-    r_svc: [u32; 2],
-
-    /// program state registers
-    cpsr: PSR,
-    /// banked SPSR registers
-    spsr_svc: PSR,
-    spsr_abt: PSR,
-    spsr_und: PSR,
-    spsr_irq: PSR,
-    spsr_fiq: PSR,
 }
 
 /// An instruction in a specific stage of the ARM7's three stage pipeline

@@ -23,7 +23,7 @@ pub enum ProcessorMode {
 }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CPUMode {
     ARM,

@@ -40,7 +40,6 @@ impl Instruction for Branch {
             self.offset
         };
 
-        // TODO: is i64 necessary?
         let pc = (regs.get_reg(15) as i64) + (sign_extended << 2) as i64;
         regs.set_reg(15, pc as u32);
     }
@@ -62,5 +61,28 @@ mod test {
         let branch = Branch::parse_instruction(0x0_A_ABCDEF);
         assert!(!branch.link);
         assert_eq!(branch.offset, 0xABCDEF);
+    }
+
+    #[test]
+    fn limit_min() {
+        let mut regs = Registers::new();
+        regs.set_reg(15, 64_000_000);
+        let ins = Branch { offset: 1 << 23, link: true };
+        ins.process_instruction(&mut regs);
+
+        assert_eq!(regs.get_reg(15), 64_000_000 - (1<<25));
+        assert_eq!(regs.get_reg(14), 64_000_000 - 4);
+    }
+
+    #[test]
+    fn limit_max() {
+        let mut regs = Registers::new();
+        regs.set_reg(15, 64_000_000);
+        let ins = Branch { offset : (1<<23) - 1, link: false };
+        ins.process_instruction(&mut regs);
+
+        // 4 because it gets shifted 2 so the rightmost 2 bits are 0
+        assert_eq!(regs.get_reg(15), 64_000_000 + (1<<25) - 4);
+        assert_eq!(regs.get_reg(14), 0);
     }
 }
