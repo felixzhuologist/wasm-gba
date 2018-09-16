@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::Registers;
+use ::cpu::CPU;
 use ::cpu::status_reg::CPUMode;
 use ::util;
 
@@ -26,11 +26,11 @@ impl BranchAndExchange {
 
 impl Instruction for BranchAndExchange {
     fn get_type(&self) -> InstructionType { InstructionType::BranchAndExchange }
-    fn process_instruction(&self, regs: &mut Registers) {
-        regs.set_isa(self.switch_to_thumb);
-        let jump_dest = regs.get_reg(self.reg);
-        regs.set_reg(15, jump_dest);
-        regs.should_flush = true;
+    fn process_instruction(&self, cpu: &mut CPU) {
+        cpu.set_isa(self.switch_to_thumb);
+        let jump_dest = cpu.get_reg(self.reg);
+        cpu.set_reg(15, jump_dest);
+        cpu.should_flush = true;
     }
 }
 
@@ -48,27 +48,27 @@ mod test {
 
     #[test]
     fn process() {
-        let mut regs = Registers::new();
-        regs.set_reg(3, 0x1123);
+        let mut cpu = CPU::new();
+        cpu.set_reg(3, 0x1123);
 
         let ins = BranchAndExchange { reg: 3, switch_to_thumb: true };
-        ins.process_instruction(&mut regs);
+        ins.process_instruction(&mut cpu);
 
-        assert_eq!(regs.get_reg(15), 0x1123);
-        assert_eq!(regs.cpsr.t, CPUMode::THUMB);
-        assert!(regs.should_flush);
+        assert_eq!(cpu.get_reg(15), 0x1123);
+        assert_eq!(cpu.cpsr.t, CPUMode::THUMB);
+        assert!(cpu.should_flush);
     }
 
     #[test]
     fn process_noop() {
-        let mut regs = Registers::new();
-        regs.set_reg(15, 5);
+        let mut cpu = CPU::new();
+        cpu.set_reg(15, 5);
 
         let ins = BranchAndExchange { reg: 2, switch_to_thumb: false };
-        ins.process_instruction(&mut regs);
+        ins.process_instruction(&mut cpu);
 
-        assert_eq!(regs.get_reg(15), 0);
-        assert_eq!(regs.cpsr.t, CPUMode::ARM);
-        assert!(regs.should_flush);
+        assert_eq!(cpu.get_reg(15), 0);
+        assert_eq!(cpu.cpsr.t, CPUMode::ARM);
+        assert!(cpu.should_flush);
     }
 }

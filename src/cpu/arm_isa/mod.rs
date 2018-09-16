@@ -32,7 +32,7 @@ pub enum RegOrImm {
 }
 
 pub trait Instruction {
-    fn process_instruction(&self, regs: &mut super::Registers);
+    fn process_instruction(&self, cpu: &mut super::CPU);
     /// return an enum indicating the instruction type. Used during testing
     /// to recover the instruction type 
     fn get_type(&self) -> InstructionType;
@@ -40,6 +40,6 @@ pub trait Instruction {
 
 pub struct Noop { }
 impl Instruction for Noop {
-    fn process_instruction(&self, _regs: &mut super::Registers) { }
+    fn process_instruction(&self, _cpu: &mut super::CPU) { }
     fn get_type(&self) -> InstructionType { InstructionType::Noop }
 }

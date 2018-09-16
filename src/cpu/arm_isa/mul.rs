@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::Registers;
+use ::cpu::CPU;
 use ::util;
 
 /// The multiply and multiply-accumulate instructions perform integer multiplication
@@ -33,7 +33,7 @@ impl Multiply {
 
 impl Instruction for Multiply {
     fn get_type(&self) -> InstructionType { InstructionType::Multiply }
-    fn process_instruction(&self, regs: &mut Registers) {
+    fn process_instruction(&self, cpu: &mut CPU) {
         if self.rd == 15 || self.rm == 15 || self.rn == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }
@@ -42,14 +42,14 @@ impl Instruction for Multiply {
         }
         // since we only care about the bottom 32 bits, this will be the same
         // for both signed and unsigned integers
-        let mut result: u64 = (regs.get_reg(self.rm) as u64) * (regs.get_reg(self.rn) as u64);
+        let mut result: u64 = (cpu.get_reg(self.rm) as u64) * (cpu.get_reg(self.rn) as u64);
         if self.accumulate {
-            result += regs.get_reg(self.rs) as u64;
+            result += cpu.get_reg(self.rs) as u64;
         }
-        regs.set_reg(self.rd, result as u32);
+        cpu.set_reg(self.rd, result as u32);
         if self.set_flags {
-            regs.cpsr.n = ((result >> 31) & 1) == 1;
-            regs.cpsr.z = result == 0;
+            cpu.cpsr.n = ((result >> 31) & 1) == 1;
+            cpu.cpsr.z = result == 0;
         }
     }
 }

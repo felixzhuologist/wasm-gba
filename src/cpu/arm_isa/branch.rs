@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType};
-use ::cpu::Registers;
+use ::cpu::CPU;
 use ::util;
 
 /// This instruction specifies a jump of +/- 32Mbytes. The branch offset must take
@@ -29,10 +29,10 @@ impl Branch {
 
 impl Instruction for Branch {
     fn get_type(&self) -> InstructionType { InstructionType::Branch }
-    fn process_instruction(&self, regs: &mut Registers) {
+    fn process_instruction(&self, cpu: &mut CPU) {
         if self.link {
-            let ret = regs.get_reg(15) - 4;
-            regs.set_reg(14, ret);
+            let ret = cpu.get_reg(15) - 4;
+            cpu.set_reg(14, ret);
         }
         let sign_extended = if util::get_bit(self.offset, 23) {
             self.offset | 0xFF000000
@@ -40,8 +40,8 @@ impl Instruction for Branch {
             self.offset
         };
 
-        let pc = (regs.get_reg(15) as i64) + (sign_extended << 2) as i64;
-        regs.set_reg(15, pc as u32);
+        let pc = (cpu.get_reg(15) as i64) + (sign_extended << 2) as i64;
+        cpu.set_reg(15, pc as u32);
     }
 }
 
@@ -65,24 +65,24 @@ mod test {
 
     #[test]
     fn limit_min() {
-        let mut regs = Registers::new();
-        regs.set_reg(15, 64_000_000);
+        let mut cpu = CPU::new();
+        cpu.set_reg(15, 64_000_000);
         let ins = Branch { offset: 1 << 23, link: true };
-        ins.process_instruction(&mut regs);
+        ins.process_instruction(&mut cpu);
 
-        assert_eq!(regs.get_reg(15), 64_000_000 - (1<<25));
-        assert_eq!(regs.get_reg(14), 64_000_000 - 4);
+        assert_eq!(cpu.get_reg(15), 64_000_000 - (1<<25));
+        assert_eq!(cpu.get_reg(14), 64_000_000 - 4);
     }
 
     #[test]
     fn limit_max() {
-        let mut regs = Registers::new();
-        regs.set_reg(15, 64_000_000);
+        let mut cpu = CPU::new();
+        cpu.set_reg(15, 64_000_000);
         let ins = Branch { offset : (1<<23) - 1, link: false };
-        ins.process_instruction(&mut regs);
+        ins.process_instruction(&mut cpu);
 
         // 4 because it gets shifted 2 so the rightmost 2 bits are 0
-        assert_eq!(regs.get_reg(15), 64_000_000 + (1<<25) - 4);
-        assert_eq!(regs.get_reg(14), 0);
+        assert_eq!(cpu.get_reg(15), 64_000_000 + (1<<25) - 4);
+        assert_eq!(cpu.get_reg(14), 0);
     }
 }

@@ -2,6 +2,7 @@ pub mod arm_isa;
 pub mod status_reg;
 
 use num::FromPrimitive;
+use mem;
 use util;
 use self::arm_isa::{
     branch,
@@ -19,10 +20,10 @@ use self::arm_isa::{
 };
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
-pub struct CPU {
-    // this is a separate field to allow for splitting borrow on CPU.pipeline
-    // and the rest of the CPU fields
-    regs: Registers,
+/// A wrapper structs that keeps the inner CPU and pipeline in separate fields
+/// to allow for splitting the borrow when executing an instruction
+pub struct CPUWrapper {
+    cpu: CPU,
     // since we only need to keep track of the last 3 elements
     // of the pipeline at a time (the latest fetched instruction, the latest
     // decoded instruction, and the next decoded instruction to execute), we
@@ -32,13 +33,13 @@ pub struct CPU {
     idx: usize,
 }
 
-impl CPU {
+impl CPUWrapper {
     /// Initialize CPU values assuming boot from GBA BIOS. In particular, with
     /// all regs zeroed out, and with CPSR in ARM and SVC modes with IRQ/FIQ bits
     /// set.
-    pub fn new() -> CPU {
-        let mut cpu = CPU {
-            regs: Registers::new(),
+    pub fn new() -> CPUWrapper {
+        let mut cpu = CPUWrapper {
+            cpu: CPU::new(),
             pipeline: [
                 PipelineInstruction::Empty,
                 PipelineInstruction::Empty,
@@ -46,15 +47,15 @@ impl CPU {
             ],
             idx: 0,
         };
-        cpu.regs.cpsr.i = false;
-        cpu.regs.cpsr.f = false;
-        cpu.regs.cpsr.mode = ProcessorMode:: SVC;
+        cpu.cpu.cpsr.i = false;
+        cpu.cpu.cpsr.f = false;
+        cpu.cpu.cpsr.mode = ProcessorMode:: SVC;
 
         cpu
     }
 
     fn satisfies_cond(&self, cond: u32) -> bool {
-        let cpsr = &self.regs.cpsr;
+        let cpsr = &self.cpu.cpsr;
         match CondField::from_u32(cond).unwrap() {
             CondField::EQ => cpsr.z,
             CondField::NE => !cpsr.z,
@@ -100,7 +101,7 @@ impl CPU {
         // index of the third element from the end
         let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
         if let PipelineInstruction::Decoded(ref mut ins) = self.pipeline[idx] {
-            ins.process_instruction(&mut self.regs);
+            ins.process_instruction(&mut self.cpu);
         }
     }
 
@@ -112,7 +113,7 @@ impl CPU {
     }
 }
 
-pub struct Registers {
+pub struct CPU {
     /// r0-r12 are general purpose registers,
     /// r13 is typically the stack pointer, but can be used as a general purpose
     /// register if the stack pointer isn't necessary,
@@ -141,13 +142,14 @@ pub struct Registers {
     spsr_fiq: PSR,
 
     // flush the pipeline before the start of the next cycle
-    // TODO: put this somewhere else?
-    should_flush: bool
+    should_flush: bool,
+
+    mem: mem::Memory,
 }
 
-impl Registers {
-    pub fn new() -> Registers {
-        Registers {
+impl CPU {
+    pub fn new() -> CPU {
+        CPU {
             r: [0; 16],
             r_fiq: [0; 7],
             r_irq: [0; 2],
@@ -162,7 +164,9 @@ impl Registers {
             spsr_irq: PSR::new(),
             spsr_fiq: PSR::new(),
 
-            should_flush: false
+            should_flush: false,
+
+            mem: mem::Memory::new(),
         }
     }
 
