@@ -150,7 +150,7 @@ impl Instruction for DataProc {
 /// right case uses the bottom byte of the contents of a registers.
 /// The resulting val and the carry bit (which may be used to set the carry flag
 /// for logical operations) are returned
-fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
+pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
     let shift_amount = get_shift_amount(cpu, shift);
     let val = cpu.get_reg(reg as usize);
     // TODO: use enum here?
