@@ -38,7 +38,7 @@ impl MultiplyLong {
 
 impl Instruction for MultiplyLong {
     fn get_type(&self) -> InstructionType { InstructionType::MultiplyLong }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         if self.rm == 15 || self.rs == 15 || self.rdhi == 15 || self.rdlo == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }

@@ -57,7 +57,7 @@ impl SignedDataTransfer {
 
 impl Instruction for SignedDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::SignedDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         unimplemented!()
     }
 }

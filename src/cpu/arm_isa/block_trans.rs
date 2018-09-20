@@ -38,7 +38,7 @@ impl BlockDataTransfer {
 
 impl Instruction for BlockDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::BlockDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         unimplemented!()
     }
 }

@@ -63,7 +63,7 @@ impl DataProc {
 
 impl Instruction for DataProc {
     fn get_type(&self) -> InstructionType { InstructionType::DataProc }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         let op1 = cpu.get_reg(self.rn);
         let (op2, shift_carry) = match self.op2 {
             RegOrImm::Imm { rotate, value } => {
@@ -415,7 +415,7 @@ mod test {
             rd: 3,
             op2: RegOrImm::Imm { rotate: 0, value: 10 }
         };
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(3), 21);
         assert_eq!(cpu.cpsr.c, false);
@@ -436,7 +436,7 @@ mod test {
             rd: 3,
             op2: RegOrImm::Reg { shift: 0, reg: 1 }
         };
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(3), 4);
         assert_eq!(cpu.cpsr.c, true);

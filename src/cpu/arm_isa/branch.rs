@@ -29,7 +29,7 @@ impl Branch {
 
 impl Instruction for Branch {
     fn get_type(&self) -> InstructionType { InstructionType::Branch }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         if self.link {
             let ret = cpu.get_reg(15) - 4;
             cpu.set_reg(14, ret);
@@ -68,7 +68,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.set_reg(15, 64_000_000);
         let ins = Branch { offset: 1 << 23, link: true };
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(15), 64_000_000 - (1<<25));
         assert_eq!(cpu.get_reg(14), 64_000_000 - 4);
@@ -79,7 +79,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.set_reg(15, 64_000_000);
         let ins = Branch { offset : (1<<23) - 1, link: false };
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
 
         // 4 because it gets shifted 2 so the rightmost 2 bits are 0
         assert_eq!(cpu.get_reg(15), 64_000_000 + (1<<25) - 4);

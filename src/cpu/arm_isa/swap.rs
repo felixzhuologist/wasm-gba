@@ -29,7 +29,7 @@ impl SingleDataSwap {
 
 impl Instruction for SingleDataSwap {
     fn get_type(&self) -> InstructionType { InstructionType::SingleDataSwap }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         unimplemented!()
     }
 }

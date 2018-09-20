@@ -13,7 +13,7 @@ impl SWInterrupt {
 
 impl Instruction for SWInterrupt {
     fn get_type(&self) -> InstructionType { InstructionType::SWInterrupt }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         unimplemented!()
     }
 }

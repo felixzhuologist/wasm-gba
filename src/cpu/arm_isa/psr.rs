@@ -63,7 +63,7 @@ impl PSRTransfer {
 
 impl Instruction for PSRTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::PSRTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         match self.trans {
             TransferType::Read { ref stype, dest } => {
                 if dest == 15 {
@@ -145,7 +145,7 @@ mod test {
             trans: TransferType::Read { stype: StateRegType::Current, dest: 0 }
         };
 
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
 
         assert_eq!(cpu.cpsr.to_u32(), cpu.get_reg(0));
     }
@@ -157,6 +157,6 @@ mod test {
             trans: TransferType::Read { stype: StateRegType::Saved, dest: 15 }
         };
 
-        ins.process_instruction(&mut CPU::new());
+        ins.run(&mut CPU::new());
     }
 }

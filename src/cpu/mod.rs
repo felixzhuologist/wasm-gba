@@ -101,7 +101,7 @@ impl CPUWrapper {
         // index of the third element from the end
         let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
         if let PipelineInstruction::Decoded(ref mut ins) = self.pipeline[idx] {
-            ins.process_instruction(&mut self.cpu);
+            ins.run(&mut self.cpu);
         }
     }
 

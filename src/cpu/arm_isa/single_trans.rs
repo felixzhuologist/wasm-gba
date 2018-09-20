@@ -54,7 +54,7 @@ impl SingleDataTransfer {
 
 impl Instruction for SingleDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::SingleDataTransfer }
-    fn process_instruction(&self, cpu: &mut CPU) {
+    fn run(&self, cpu: &mut CPU) {
         if self.rn == 15 && self.write_back {
             panic!("cannot write back when R15 is the base register");
         }
@@ -177,7 +177,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.set_reg(0, 80);
         cpu.mem.set_byte(100, 77);
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
         assert_eq!(cpu.get_reg(1), 77);
     }
 
@@ -196,7 +196,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.set_reg(0, 100);
         cpu.set_reg(1, 77);
-        ins.process_instruction(&mut cpu);
+        ins.run(&mut cpu);
         assert_eq!(cpu.mem.get_byte(100), 77);
         assert_eq!(cpu.get_reg(0), 80);
     }
