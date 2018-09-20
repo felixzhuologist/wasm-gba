@@ -115,8 +115,8 @@ impl Instruction for DataProc {
             Op::TST |
             Op::TEQ |
             Op::CMP |
-            Op::CMN => true,
-            _ => false
+            Op::CMN => false,
+            _ => true
         };
 
         if should_write {
@@ -401,5 +401,46 @@ mod test {
         assert_eq!(
             apply_shift(&cpu, 0b1110_0111, 2),
             (0x12345608u32.rotate_right(5), false));
+    }
+
+    #[test]
+    fn add() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(0, 11);
+
+        let ins = DataProc {
+            opcode: Op::ADD,
+            set_flags: true,
+            rn: 0,
+            rd: 3,
+            op2: RegOrImm::Imm { rotate: 0, value: 10 }
+        };
+        ins.process_instruction(&mut cpu);
+
+        assert_eq!(cpu.get_reg(3), 21);
+        assert_eq!(cpu.cpsr.c, false);
+        assert_eq!(cpu.cpsr.z, false);
+        assert_eq!(cpu.cpsr.n, false);
+    }
+
+    #[test]
+    fn add_overflow() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(0, std::u32::MAX);
+        cpu.set_reg(1, 5);
+
+        let ins = DataProc {
+            opcode: Op::ADD,
+            set_flags: true,
+            rn: 0,
+            rd: 3,
+            op2: RegOrImm::Reg { shift: 0, reg: 1 }
+        };
+        ins.process_instruction(&mut cpu);
+
+        assert_eq!(cpu.get_reg(3), 4);
+        assert_eq!(cpu.cpsr.c, true);
+        assert_eq!(cpu.cpsr.z, false);
+        assert_eq!(cpu.cpsr.n, false);
     }
 }
