@@ -1,5 +1,6 @@
 use super::{Instruction, InstructionType, RegOrImm};
 use ::cpu::CPU;
+use ::cpu::status_reg::{CPUMode, ProcessorMode};
 use ::util;
 
 pub enum StateRegType {
@@ -10,7 +11,7 @@ pub enum StateRegType {
 }
 
 pub enum TransferType {
-    Read { stype: StateRegType, dest: u32 },
+    Read { stype: StateRegType, dest: usize },
     Write { stype: StateRegType, source: RegOrImm }
 }
 
@@ -54,7 +55,7 @@ impl PSRTransfer {
                     }
                 }
             } else {
-                TransferType::Read { stype, dest: util::get_nibble(ins, 12) }
+                TransferType::Read { stype, dest: util::get_nibble(ins, 12) as usize }
             }
         }
     }
@@ -64,17 +65,25 @@ impl Instruction for PSRTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::PSRTransfer }
     fn process_instruction(&self, cpu: &mut CPU) {
         match self.trans {
-            TransferType::Read { ref stype, ref dest } => {
+            TransferType::Read { ref stype, dest } => {
+                if dest == 15 {
+                    panic!("can't read/write PSR with R15");
+                }
                 let val = match stype {
                     StateRegType::Current => cpu.cpsr.to_u32(),
                     StateRegType::Saved => cpu.get_spsr().to_u32()
                 };
-                cpu.set_reg(*dest as usize, val);
+                cpu.set_reg(dest, val);
             },
             TransferType::Write { ref stype, ref source } => {
                 let val = match source {
-                    RegOrImm::Imm { ref rotate, ref value } => value.rotate_right(*rotate),
-                    RegOrImm::Reg { shift: _, ref reg } => cpu.get_reg(*reg as usize)
+                    RegOrImm::Imm { rotate, ref value } => value.rotate_right(*rotate),
+                    RegOrImm::Reg { shift: _, reg } => {
+                        if *reg == 15 {
+                            panic!("can't read/write PSR with R15");
+                        }
+                        cpu.get_reg(*reg as usize)
+                    }
                 };
                 match stype {
                     StateRegType::Current => cpu.set_cpsr(val),
@@ -123,5 +132,31 @@ mod test {
             } => true,
             _ => false
         });
+    }
+
+    #[test]
+    fn read_cpsr() {
+        let mut cpu = CPU::new();
+        cpu.cpsr.c = true;
+        cpu.cpsr.t = CPUMode::THUMB;
+        cpu.cpsr.mode = ProcessorMode::FIQ;
+
+        let ins = PSRTransfer {
+            trans: TransferType::Read { stype: StateRegType::Current, dest: 0 }
+        };
+
+        ins.process_instruction(&mut cpu);
+
+        assert_eq!(cpu.cpsr.to_u32(), cpu.get_reg(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn use_r15() {
+        let ins = PSRTransfer {
+            trans: TransferType::Read { stype: StateRegType::Saved, dest: 15 }
+        };
+
+        ins.process_instruction(&mut CPU::new());
     }
 }
