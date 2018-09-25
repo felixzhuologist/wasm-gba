@@ -76,6 +76,11 @@ impl Memory {
         segment[idx]
     }
 
+    pub fn get_halfword(&self, addr: u32) -> u16 {
+        let (segment, idx) = self.get_loc(addr);
+        segment[idx] as u16 | (segment[idx + 1] as u16) << 8
+    }
+
     pub fn get_word(&self, addr: u32) -> u32 {
         let (segment, idx) = self.get_loc(addr);
         segment[idx] as u32 |
@@ -87,6 +92,12 @@ impl Memory {
     pub fn set_byte(&mut self, addr: u32, val: u8) {
         let (segment, idx) = self.get_loc_mut(addr);
         segment[idx] = val;
+    }
+
+    pub fn set_halfword(&mut self, addr: u32, val: u32) {
+        let (segment, idx) = self.get_loc_mut(addr);
+        segment[idx] = util::get_byte(val, 0) as u8;
+        segment[idx + 1] = util::get_byte(val, 8) as u8;
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {

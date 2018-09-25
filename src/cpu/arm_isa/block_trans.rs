@@ -64,6 +64,9 @@ impl Instruction for BlockDataTransfer {
         if force_user_bank && self.write_back {
             panic!("write back should not be used when forcing user bank");
         }
+        if is_pc_in_list && self.load {
+            cpu.should_flush = true;
+        }
 
         let first_reg = 0;
         let mut addr = cpu.get_reg(self.rn);

@@ -17,7 +17,9 @@ use self::arm_isa::{
     swi,
     swap,
     Noop,
+    RegOrImm,
 };
+use self::arm_isa::data::apply_shift;
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
@@ -209,6 +211,60 @@ impl CPU {
         };
     }
 
+    // TODO: merge params into struct?
+    pub fn transfer_reg(&mut self, params: TransferParams) {
+        // pre transfer
+        let mut addr = self.get_reg(params.base_reg);
+        let offset = self.get_offset(&params.offset);
+        if params.pre_index {
+            addr = if params.offset_up { addr + offset } else { addr - offset };
+        }
+
+        // transfer
+        if params.load {
+            let val = match params.size {
+                TransferSize::Byte => {
+                    if params.signed {
+                        (self.mem.get_byte(addr) as i8) as u32
+                    } else {
+                        self.mem.get_byte(addr) as u32
+                    }
+                },
+                TransferSize::Halfword => {
+                    if params.signed {
+                        (self.mem.get_halfword(addr) as i16) as u32
+                    } else {
+                        self.mem.get_halfword(addr) as u32
+                    }
+                },
+                TransferSize::Word => self.mem.get_word(addr),
+            };
+            self.set_reg(params.data_reg, val);
+        } else {
+            let mut val = self.get_reg(params.data_reg);
+            if params.data_reg == 15 {
+                // when R15 is the source of a STR, the stored value will be the
+                // addr of the current instruction + 12
+                val += 4;
+            }
+            match params.size {
+                TransferSize::Byte => self.mem.set_byte(addr, val as u8),
+                TransferSize::Halfword => self.mem.set_halfword(addr, val),
+                TransferSize::Word => self.mem.set_word(addr, val),
+            }
+        }
+
+        // post transfer
+        if !params.pre_index {
+            addr = if params.offset_up { addr + offset } else { addr - offset };
+        }
+
+        // write back is assumed if post indexing
+        if !params.pre_index || params.write_back {
+            self.set_reg(params.base_reg, addr);
+        } 
+    }
+
     /// restore CPSR to the SPSR for the current mode
     fn restore_cpsr(&mut self) {
         unimplemented!()
@@ -229,6 +285,18 @@ impl CPU {
 
     fn set_isa(&mut self, thumb: bool) {
         self.cpsr.t = if thumb { CPUMode::THUMB } else { CPUMode::ARM };
+    }
+
+    fn get_offset(&self, offset: &RegOrImm) -> u32 {
+        match *offset {
+            RegOrImm::Imm { rotate: _, value: n } => n,
+            RegOrImm::Reg { shift: s, reg: r } => {
+                if util::get_bit(s, 3) && util::get_bit(s, 0) {
+                    panic!("cannot use register value as shift amount for LDR/STR");
+                }
+                apply_shift(self, s, r).0
+            }
+        } 
     }
 }
 
@@ -302,12 +370,94 @@ pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
     }
 }
 
+pub struct TransferParams<'a> {
+    pre_index: bool,
+    offset_up: bool,
+    size: TransferSize,
+    write_back: bool,
+    load: bool,
+    base_reg: usize,
+    data_reg: usize,
+    signed: bool,
+    offset: &'a RegOrImm
+}
+
+pub enum TransferSize {
+    Byte,
+    Halfword,
+    Word,
+}
+
 #[cfg(test)]
 mod test {
+
+    mod cpu {
+        use ::cpu::*;
+
+        #[test]
+        fn transfer_load() {
+            let mut cpu = CPU::new();
+            cpu.set_reg(0, 80);
+            cpu.mem.set_byte(100, 77);
+            cpu.transfer_reg(TransferParams {
+                pre_index: true,
+                offset_up: true,
+                size: TransferSize::Byte,
+                write_back: false,
+                load: true,
+                base_reg: 0,
+                data_reg: 1,
+                signed: false,
+                offset: &RegOrImm::Imm { rotate: 0, value: 20 }
+            });
+            assert_eq!(cpu.get_reg(1), 77);
+        }
+
+        #[test]
+        fn transfer_store_autoindex() {
+            let mut cpu = CPU::new();
+            cpu.set_reg(0, 100);
+            cpu.set_reg(1, 77);
+            cpu.transfer_reg(TransferParams {
+                pre_index: false,
+                offset_up: false,
+                size: TransferSize::Byte,
+                write_back: false,
+                load: false,
+                base_reg: 0,
+                data_reg: 1,
+                signed: false,
+                offset: &RegOrImm::Imm { rotate: 0, value: 20 }
+            });
+            assert_eq!(cpu.mem.get_byte(100), 77);
+            assert_eq!(cpu.get_reg(0), 80);
+        }
+
+        #[test]
+        fn transfer_load_signed() {
+            let mut cpu = CPU::new();
+            cpu.set_reg(0, 100);
+            cpu.mem.set_word(100, 0xA10B);
+            cpu.transfer_reg(TransferParams {
+                pre_index: false,
+                offset_up: false,
+                size: TransferSize::Halfword,
+                write_back: true,
+                load: true,
+                base_reg: 0,
+                data_reg: 14,
+                signed: true,
+                offset: &RegOrImm::Imm { rotate: 0, value: 20 }
+            });
+            assert_eq!(cpu.get_reg(14), 0xFFFFA10B);
+            assert_eq!(cpu.get_reg(0), 80);
+        }
+    }
 
     mod get_instruction_handler {
         use ::cpu::*;
         use ::cpu::arm_isa::InstructionType;
+
         #[test]
         fn branch() {
             assert_eq!(

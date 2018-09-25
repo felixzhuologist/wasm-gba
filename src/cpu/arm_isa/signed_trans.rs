@@ -1,5 +1,5 @@
 use super::{Instruction, InstructionType, RegOrImm};
-use ::cpu::CPU;
+use ::cpu::{CPU, TransferParams, TransferSize};
 use ::util;
 
 /// Load or store a half words of data from memory and also load sign-extended
@@ -11,6 +11,8 @@ pub struct SignedDataTransfer {
     pre_index: bool,
     /// if true, add the offset to base, else subtract it
     offset_up: bool,
+    /// if true, transfer halfword, else byte
+    halfword: bool,
     /// if true, write address back to base reg, else do nothing
     write_back: bool,
     /// if true, load from memory, else write to memory
@@ -21,8 +23,6 @@ pub struct SignedDataTransfer {
     rd: usize,
     /// if true, treat as signed, otherwise as unsigned
     signed: bool,
-    /// if true, transfer halfword, else byte
-    halfword: bool,
     /// offset register
     offset: RegOrImm
 }
@@ -58,7 +58,24 @@ impl SignedDataTransfer {
 impl Instruction for SignedDataTransfer {
     fn get_type(&self) -> InstructionType { InstructionType::SignedDataTransfer }
     fn run(&self, cpu: &mut CPU) {
-        unimplemented!()
+        if !self.load && self.signed {
+            panic!("should not store when signed operations have been selected");
+        }
+
+        // all the same, except you can load as signed (which means that when
+        // you sign extended the value before you store in register, and with
+        // different quantities)
+        cpu.transfer_reg(TransferParams {
+            pre_index: self.pre_index,
+            offset_up: self.offset_up,
+            size: if self.halfword { TransferSize::Halfword } else { TransferSize::Byte },
+            write_back: self.write_back,
+            load: self.signed || self.load, // always load if S bit is 1
+            base_reg: self.rn,
+            data_reg: self.rd,
+            signed: self.signed,
+            offset: &self.offset
+        });
     }
 }
 
