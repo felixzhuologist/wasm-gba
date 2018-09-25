@@ -115,11 +115,8 @@ impl CPUWrapper {
 
 pub struct CPU {
     /// r0-r12 are general purpose registers,
-    /// r13 is typically the stack pointer, but can be used as a general purpose
-    /// register if the stack pointer isn't necessary,
-    /// r14 is the link register (for storing addressses to jump back to)/a
-    /// general purpose register, and r15 is the PC pointing to address + 8 of
-    /// the current instruction
+    /// r13 is usually the stack pointer, r14 is usually the link register,
+    /// and r15 is the PC pointing to address + 8 of the current instruction
     r: [u32; 16],
     /// R8-R14 are banked in FIQ mode
     r_fiq: [u32; 7],

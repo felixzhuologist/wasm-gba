@@ -4,7 +4,7 @@ use num::FromPrimitive;
 /// The 7 modes of operation of the ARM7TDMI processor, which is in user mode
 /// by default
 enum_from_primitive! {
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ProcessorMode {
     USR = 0b10000,
