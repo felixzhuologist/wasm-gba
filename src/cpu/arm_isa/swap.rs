@@ -30,7 +30,25 @@ impl SingleDataSwap {
 impl Instruction for SingleDataSwap {
     fn get_type(&self) -> InstructionType { InstructionType::SingleDataSwap }
     fn run(&self, cpu: &mut CPU) {
-        unimplemented!()
+        if self.rn == 15 || self.rd == 15 || self.rm == 15 {
+            panic!("can't use R15 as an operand");
+        }
+    
+        let addr = cpu.get_reg(self.rn);
+        let memval = if self.byte {
+            cpu.mem.get_byte(addr) as u32
+        } else {
+            cpu.mem.get_word(addr)
+        };
+
+        let regval = cpu.get_reg(self.rm);
+        if self.byte {
+            cpu.mem.set_byte(addr, regval as u8);
+        } else {
+            cpu.mem.set_word(addr, regval);
+        }
+
+        cpu.set_reg(self.rd, memval);
     }
 }
 
@@ -46,5 +64,47 @@ mod test {
         assert_eq!(ins.rn, 8);
         assert_eq!(ins.rd, 1);
         assert_eq!(ins.rm, 12);
+    }
+
+    #[test]
+    fn swap_byte() {
+        let mut cpu = CPU::new();
+        let addr = 0x02000001;
+        cpu.set_reg(0, addr);
+        cpu.set_reg(2, 0xFF);
+        cpu.mem.set_byte(addr, 0x3A);
+
+        let ins = SingleDataSwap {
+            byte: true,
+            rn: 0,
+            rd: 1,
+            rm: 2,
+        };
+
+        ins.run(&mut cpu);
+
+        assert_eq!(cpu.mem.get_byte(addr), 0xFF);
+        assert_eq!(cpu.get_reg(1), 0x3A);
+    }
+
+    #[test]
+    fn swap_word() {
+        let mut cpu = CPU::new();
+        let addr = 0x02000001;
+        cpu.set_reg(0, addr);
+        cpu.set_reg(1, 0xFE41);
+        cpu.mem.set_word(addr, 0x3AFF001);
+
+        let ins = SingleDataSwap {
+            byte: false,
+            rn: 0,
+            rd: 1,
+            rm: 1,
+        };
+
+        ins.run(&mut cpu);
+
+        assert_eq!(cpu.mem.get_word(addr), 0xFE41);
+        assert_eq!(cpu.get_reg(1), 0x3AFF001); 
     }
 }
