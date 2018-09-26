@@ -1,6 +1,5 @@
-use std;
 use num::FromPrimitive;
-use super::{InstructionType, Instruction, RegOrImm};
+use super::RegOrImm;
 use ::cpu::CPU;
 use ::util;
 
@@ -35,6 +34,8 @@ pub struct DataProc {
     op2: RegOrImm
 }
 
+const MAX: u32 = 0xFFFFFFFF;
+
 impl DataProc {
     /// parses the following format:
     /// 27 .. 26 | 25 | 24 .. 21 | 20 | 19 .. 16 | 15 .. 12 | 11 .. 0
@@ -59,11 +60,8 @@ impl DataProc {
             }
         }
     }
-}
 
-impl Instruction for DataProc {
-    fn get_type(&self) -> InstructionType { InstructionType::DataProc }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         let op1 = cpu.get_reg(self.rn);
         let (op2, shift_carry) = match self.op2 {
             RegOrImm::Imm { rotate, value } => {
@@ -185,7 +183,7 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
             // As for LSR, ASR 0 is used to encode ASR 32
             if shift_amount == 0 || shift_amount > 32 {
                 let carry_out = ((val >> 31) & 1) == 1;
-                (if carry_out {std::u32::MAX} else {0}, carry_out)
+                (if carry_out {MAX} else {0}, carry_out)
             } else {
                 // convert to i32 to get arithmetic shifting
                 let partial_shifted = (val as i32) >> (shift_amount - 1);
@@ -362,12 +360,12 @@ mod test {
 
         // check ASR 0 (32)
         assert_eq!(apply_shift(&cpu, 0b00000_100, 0), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b00000_100, 1), (std::u32::MAX, true));
+        assert_eq!(apply_shift(&cpu, 0b00000_100, 1), (MAX, true));
 
         // check ASR > 32
         cpu.set_reg(14, 33);
         assert_eq!(apply_shift(&cpu, 0b1110_0101, 0), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b1110_0101, 1), (std::u32::MAX, true));
+        assert_eq!(apply_shift(&cpu, 0b1110_0101, 1), (MAX, true));
     }
 
     #[test]
@@ -426,7 +424,7 @@ mod test {
     #[test]
     fn add_overflow() {
         let mut cpu = CPU::new();
-        cpu.set_reg(0, std::u32::MAX);
+        cpu.set_reg(0, MAX);
         cpu.set_reg(1, 5);
 
         let ins = DataProc {

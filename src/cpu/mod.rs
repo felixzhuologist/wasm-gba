@@ -5,19 +5,32 @@ use num::FromPrimitive;
 use mem;
 use util;
 use self::arm_isa::{
+    block_trans,
     branch,
     branch_ex,
     data,
     mul,
     mul_long,
     psr,
-    single_trans,
     signed_trans,
-    block_trans,
-    swi,
+    single_trans,
     swap,
-    Noop,
-    RegOrImm,
+    swi,
+    Instruction,
+    RegOrImm};
+use self::arm_isa::Instruction::{
+    DataProc,
+    PSRTransfer,
+    Multiply,
+    MultiplyLong,
+    SwapTransfer,
+    SingleTransfer,
+    SignedTransfer,
+    BlockTransfer,
+    Branch,
+    BranchEx,
+    SWInterrupt,
+    Noop
 };
 use self::arm_isa::data::apply_shift;
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
@@ -94,7 +107,7 @@ impl CPUWrapper {
                 if self.satisfies_cond(cond) {
                     get_instruction_handler(n).unwrap()
                 } else {
-                    Box::new(Noop { })
+                    Noop
                 })
         }
     }
@@ -102,8 +115,21 @@ impl CPUWrapper {
     pub fn execute(&mut self) {
         // index of the third element from the end
         let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
-        if let PipelineInstruction::Decoded(ref mut ins) = self.pipeline[idx] {
-            ins.run(&mut self.cpu);
+        if let PipelineInstruction::Decoded(ref ins) = self.pipeline[idx] {
+            match ins {
+                DataProc(ins) => ins.run(&mut self.cpu),
+                PSRTransfer(ins) => ins.run(&mut self.cpu),
+                Multiply(ins) => ins.run(&mut self.cpu),
+                MultiplyLong(ins) => ins.run(&mut self.cpu),
+                SwapTransfer(ins) => ins.run(&mut self.cpu),
+                SingleTransfer(ins) => ins.run(&mut self.cpu),
+                SignedTransfer(ins) => ins.run(&mut self.cpu),
+                BlockTransfer(ins) => ins.run(&mut self.cpu),
+                Branch(ins) => ins.run(&mut self.cpu),
+                BranchEx(ins) => ins.run(&mut self.cpu),
+                SWInterrupt(ins) => ins.run(&mut self.cpu),
+                Noop => (),
+            }
         }
     }
 
@@ -310,7 +336,7 @@ pub enum PipelineInstruction {
     /// a 16 bit THUMB instruction
     Raw(u32),
     /// A decoded instruction
-    Decoded(Box<arm_isa::Instruction>)
+    Decoded(Instruction)
 }
 
 enum_from_primitive! {
@@ -334,37 +360,37 @@ pub enum CondField {
 }
 }
 
-pub fn get_instruction_handler(ins: u32) -> Option<Box<arm_isa::Instruction>> {
+pub fn get_instruction_handler(ins: u32) -> Option<Instruction> {
     let op0 = util::get_nibble(ins, 24);
     let op1 = util::get_nibble(ins, 20);
     let op2 = util::get_nibble(ins, 4);
     if op0 == 0 && op1 < 4 && op2 == 0b1001 {
-        Some(Box::new(mul::Multiply::parse_instruction(ins)))
+        Some(Multiply(mul::Multiply::parse_instruction(ins)))
     } else if op0 == 0 && op1 > 7 && op2 == 0b1001 {
-        Some(Box::new(mul_long::MultiplyLong::parse_instruction(ins)))
+        Some(MultiplyLong(mul_long::MultiplyLong::parse_instruction(ins)))
     } else if op0 == 1 && op2 == 9 {
-        Some(Box::new(swap::SingleDataSwap::parse_instruction(ins)))
+        Some(SwapTransfer(swap::SingleDataSwap::parse_instruction(ins)))
     } else if op0 == 1 && op2 == 1 {
-        Some(Box::new(branch_ex::BranchAndExchange::parse_instruction(ins)))
+        Some(BranchEx(branch_ex::BranchAndExchange::parse_instruction(ins)))
     } else if op0 < 2 && (op2 == 9 || op2 == 11 || op2 == 13 || op2 == 15) {
         // if bits 4 and 7 are 1, this must be a signed/hw transfer
-        Some(Box::new(signed_trans::SignedDataTransfer::parse_instruction(ins)))
+        Some(SignedTransfer(signed_trans::SignedDataTransfer::parse_instruction(ins)))
     } else if op0 < 4 {
         let data = data::DataProc::parse_instruction(ins);
         let op = data.opcode as u8;
         if !data.set_flags && op > 7 && op < 12 {
-            Some(Box::new(psr::PSRTransfer::parse_instruction(ins)))
+            Some(PSRTransfer(psr::PSRTransfer::parse_instruction(ins)))
         } else {
-            Some(Box::new(data))
+            Some(DataProc(data))
         }
     } else if op0 >= 4 && op0 < 8 {
-        Some(Box::new(single_trans::SingleDataTransfer::parse_instruction(ins)))
+        Some(SingleTransfer(single_trans::SingleDataTransfer::parse_instruction(ins)))
     } else if op0 == 8 || op0 == 9 {
-        Some(Box::new(block_trans::BlockDataTransfer::parse_instruction(ins)))
+        Some(BlockTransfer(block_trans::BlockDataTransfer::parse_instruction(ins)))
     } else if op0 == 10 || op0 == 11 {
-        Some(Box::new(branch::Branch::parse_instruction(ins)))
+        Some(Branch(branch::Branch::parse_instruction(ins)))
     } else if op0 == 15 {
-        Some(Box::new(swi::SWInterrupt::parse_instruction(ins)))
+        Some(SWInterrupt(swi::SWInterrupt::parse_instruction(ins)))
     } else {
         None
     }
@@ -456,118 +482,85 @@ mod test {
 
     mod get_instruction_handler {
         use ::cpu::*;
-        use ::cpu::arm_isa::InstructionType;
+        use ::cpu::arm_isa::Instruction;
+
+        macro_rules! has_type {
+            ($instr:expr, $instr_type: pat) => (
+                assert!(match get_instruction_handler($instr).unwrap() {
+                    $instr_type => true,
+                    _ => false
+                })
+            )
+        }
 
         #[test]
         fn branch() {
-            assert_eq!(
-                get_instruction_handler(0x0_A_123456).unwrap().get_type(),
-                InstructionType::Branch);
-            assert_eq!(
-                get_instruction_handler(0x0_B_123456).unwrap().get_type(),
-                InstructionType::Branch);
+            has_type!(0x0_A_123456, Instruction::Branch(_));
+            has_type!(0x0_B_123456, Instruction::Branch(_));
         }
 
         #[test]
         fn bex() {
-            assert_eq!(
-                get_instruction_handler(0x0_12FFF1_5).unwrap().get_type(),
-                InstructionType::BranchAndExchange);
+            has_type!(0x0_12FFF1_5, Instruction::BranchEx(_));
         }
 
         #[test]
         fn data() {
-            assert_eq!(
-                get_instruction_handler(0x03123456).unwrap().get_type(),
-                InstructionType::DataProc);
-            assert_eq!(
-                get_instruction_handler(0xA3123456).unwrap().get_type(),
-                InstructionType::DataProc);
-            assert_eq!(
-                get_instruction_handler(0x001A3D56).unwrap().get_type(),
-                InstructionType::DataProc);
+            has_type!(0x03123456, Instruction::DataProc(_));
+            has_type!(0xA3123456, Instruction::DataProc(_));
+            has_type!(0x001A3D56, Instruction::DataProc(_));
         }
 
         #[test]
         fn mul() {
-            assert_eq!(
-                get_instruction_handler(0x03_123_9_A).unwrap().get_type(),
-                InstructionType::Multiply);
-            assert_eq!(
-                get_instruction_handler(0x02_ABC_9_0).unwrap().get_type(),
-                InstructionType::Multiply);
+            has_type!(0x03_123_9_A, Instruction::Multiply(_));
+            has_type!(0x02_ABC_9_0, Instruction::Multiply(_));
         }
 
         #[test]
         fn mul_long() {
-            assert_eq!(
-                get_instruction_handler(0x08_123_9_A).unwrap().get_type(),
-                InstructionType::MultiplyLong);
-            assert_eq!(
-                get_instruction_handler(0x0B_ABC_9_0).unwrap().get_type(),
-                InstructionType::MultiplyLong);
+            has_type!(0x08_123_9_A, Instruction::MultiplyLong(_));
+            has_type!(0x0B_ABC_9_0, Instruction::MultiplyLong(_));
         }
 
         #[test]
         fn psr() {
-           assert_eq!(
-                get_instruction_handler(0b0011_00010_1_001111_0000_000000000000)
-                    .unwrap().get_type(),
-                InstructionType::PSRTransfer);
-           assert_eq!(
-                get_instruction_handler(0b1111_00010_0_1010011111_00000000_1111)
-                    .unwrap().get_type(),
-                InstructionType::PSRTransfer);
+            has_type!(
+                0b0011_00010_1_001111_0000_000000000000,
+                Instruction::PSRTransfer(_));
+            has_type!(
+                0b1111_00010_0_1010011111_00000000_1111,
+                Instruction::PSRTransfer(_));
         }
 
         #[test]
         fn single_trans() {
-            assert_eq!(
-                get_instruction_handler(0xA_4_123456).unwrap().get_type(),
-                InstructionType::SingleDataTransfer);
-            assert_eq!(
-                get_instruction_handler(0xA_7_ABCDEF).unwrap().get_type(),
-                InstructionType::SingleDataTransfer);
+            has_type!(0xA_4_123456, Instruction::SingleTransfer(_));
+            has_type!(0xA_7_ABCDEF, Instruction::SingleTransfer(_));
         }
 
         #[test]
         fn block_trans() {
-            assert_eq!(
-                get_instruction_handler(0x0_8_123456).unwrap().get_type(),
-                InstructionType::BlockDataTransfer);
-            assert_eq!(
-                get_instruction_handler(0x0_9_1DFA10).unwrap().get_type(),
-                InstructionType::BlockDataTransfer);
+            has_type!(0x0_8_123456, Instruction::BlockTransfer(_));
+            has_type!(0x0_9_1DFA10, Instruction::BlockTransfer(_));
         }
 
         #[test]
         fn sw_interrupt() {
-            assert_eq!(
-                get_instruction_handler(0xFF_123ABC).unwrap().get_type(),
-                InstructionType::SWInterrupt);
+            has_type!(0xFF_123ABC, Instruction::SWInterrupt(_));
         }
 
         #[test]
         fn swap() {
-            assert_eq!(
-                get_instruction_handler(0xF_1_0_123_9_5).unwrap().get_type(),
-                InstructionType::SingleDataSwap);
-            assert_eq!(
-                get_instruction_handler(0xF_1_8_ABC_9_E).unwrap().get_type(),
-                InstructionType::SingleDataSwap);
+            has_type!(0xF_1_0_123_9_5, Instruction::SwapTransfer(_));
+            has_type!(0xF_1_8_ABC_9_E, Instruction::SwapTransfer(_));
         }
 
         #[test]
         fn signed_halfword_transfer() {
-            assert_eq!(
-                get_instruction_handler(0xF_1_0BE0_B_3).unwrap().get_type(),
-                InstructionType::SignedDataTransfer);
-            assert_eq!(
-                get_instruction_handler(0xF_0_FABC_D_3).unwrap().get_type(),
-                InstructionType::SignedDataTransfer);
-            assert_eq!(
-                get_instruction_handler(0xF_0_7123_F_3).unwrap().get_type(),
-                InstructionType::SignedDataTransfer);
+            has_type!(0xF_1_0BE0_B_3, Instruction::SignedTransfer(_));
+            has_type!(0xF_0_FABC_D_3, Instruction::SignedTransfer(_));
+            has_type!(0xF_0_7123_F_3, Instruction::SignedTransfer(_));
         }
     }
 }

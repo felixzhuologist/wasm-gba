@@ -1,4 +1,4 @@
-use super::{Instruction, InstructionType, RegOrImm};
+use super::RegOrImm;
 use ::cpu::{CPU, TransferParams, TransferSize};
 use ::util;
 
@@ -49,11 +49,8 @@ impl SingleDataTransfer {
             }
         }
     }
-}
 
-impl Instruction for SingleDataTransfer {
-    fn get_type(&self) -> InstructionType { InstructionType::SingleDataTransfer }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if self.rn == 15 && self.write_back {
             panic!("cannot write back when R15 is the base register");
         }

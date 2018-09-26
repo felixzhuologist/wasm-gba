@@ -8,10 +8,12 @@ pub struct Memory {
     pal: [u8; 0x3FF],
     vram: [u8; 0x17FFF],
     oam: [u8; 0x3FF],
-    // store cartridge data on the heap so that we can allocate only what is
-    // necessary
-    pak: Vec<u8>,
-    cart: Vec<u8>,
+    // ROM in the game cartridge appears in this area
+    // TODO: allocate on the javascript side?
+    // pak: Vec<u8>,
+    // either SRAM or flash ROM used for saving game data
+    // TODO: allocate on the javascript side?
+    // cart: Vec<u8>,
 }
 
 impl Memory {
@@ -24,8 +26,8 @@ impl Memory {
             pal: [0; 0x3FF],
             vram: [0; 0x17FFF],
             oam: [0; 0x3FF],
-            pak: Vec::new(),
-            cart: Vec::new(),
+            // pak: Vec::new(),
+            // cart: Vec::new(),
         }
     }
 
@@ -41,11 +43,11 @@ impl Memory {
             0x05000000...0x050003FF => (&self.pal, addr - 0x05000000),
             0x06000000...0x06017FFF => (&self.vram, addr - 0x06000000),
             0x07000000...0x070003FF => (&self.oam, addr - 0x07000000),
-            0x08000000...0x09FFFFFF => (&self.pak, addr - 0x08000000),
-            // TODO: rom mirrors
+            // TODO: ROM data
+            0x08000000...0x09FFFFFF => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
-            0x0E000000...0x0E00FFFF => (&self.pak, addr - 0x0E000000),
+            0x0E000000...0x0E00FFFF => unimplemented!(),
             _ => panic!("accessing unused memory")
         };
         (result.0, result.1 as usize)
@@ -61,11 +63,11 @@ impl Memory {
             0x05000000...0x050003FF => (&mut self.pal, addr - 0x05000000),
             0x06000000...0x06017FFF => (&mut self.vram, addr - 0x06000000),
             0x07000000...0x070003FF => (&mut self.oam, addr - 0x07000000),
-            0x08000000...0x09FFFFFF => (&mut self.pak, addr - 0x08000000),
-            // TODO: rom mirrors
+            // TODO: ROM data
+            0x08000000...0x09FFFFFF => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
-            0x0E000000...0x0E00FFFF => (&mut self.pak, addr - 0x0E000000),
+            0x0E000000...0x0E00FFFF => unimplemented!(),
             _ => panic!("accessing unused memory")
         };
         (result.0, result.1 as usize)

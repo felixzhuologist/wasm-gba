@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::util;
 
@@ -29,11 +28,8 @@ impl Multiply {
             rm: util::get_nibble(ins, 0) as usize
         }
     }
-}
 
-impl Instruction for Multiply {
-    fn get_type(&self) -> InstructionType { InstructionType::Multiply }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if self.rd == 15 || self.rm == 15 || self.rn == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }

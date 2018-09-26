@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::util;
 
@@ -25,11 +24,8 @@ impl Branch {
             link: util::get_bit(ins, 24)
         }
     }
-}
 
-impl Instruction for Branch {
-    fn get_type(&self) -> InstructionType { InstructionType::Branch }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if self.link {
             let ret = cpu.get_reg(15) - 4;
             cpu.set_reg(14, ret);

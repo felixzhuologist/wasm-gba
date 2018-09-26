@@ -1,4 +1,4 @@
-use super::{Instruction, InstructionType, RegOrImm};
+use super::RegOrImm;
 use ::cpu::CPU;
 use ::cpu::status_reg::{CPUMode, ProcessorMode};
 use ::util;
@@ -59,11 +59,8 @@ impl PSRTransfer {
             }
         }
     }
-}
 
-impl Instruction for PSRTransfer {
-    fn get_type(&self) -> InstructionType { InstructionType::PSRTransfer }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         match self.trans {
             TransferType::Read { ref stype, dest } => {
                 if dest == 15 {

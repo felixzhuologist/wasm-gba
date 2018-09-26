@@ -1,4 +1,4 @@
-use super::{Instruction, InstructionType, RegOrImm};
+use super::RegOrImm;
 use ::cpu::{CPU, TransferParams, TransferSize};
 use ::util;
 
@@ -53,11 +53,8 @@ impl SignedDataTransfer {
             }
         }
     }
-}
 
-impl Instruction for SignedDataTransfer {
-    fn get_type(&self) -> InstructionType { InstructionType::SignedDataTransfer }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if !self.load && self.signed {
             panic!("should not store when signed operations have been selected");
         }

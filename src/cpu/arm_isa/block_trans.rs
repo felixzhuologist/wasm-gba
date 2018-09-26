@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::cpu::status_reg::ProcessorMode;
 use ::util;
@@ -35,11 +34,8 @@ impl BlockDataTransfer {
             register_list: ins as u16,
         }
     }
-}
 
-impl Instruction for BlockDataTransfer {
-    fn get_type(&self) -> InstructionType { InstructionType::BlockDataTransfer }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if self.rn == 15 {
             panic!("can't use R15 as base in any LDM or STM instruction");
         }
@@ -84,7 +80,6 @@ impl Instruction for BlockDataTransfer {
                 }
 
                 let reg = if self.offset_up { i } else { 15 - i };
-                println!("reg: {}", reg);
                 if self.load {
                     if reg == self.rn {
                         // a LDM should always overwrite the updated base register

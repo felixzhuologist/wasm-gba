@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::util;
 
@@ -25,11 +24,8 @@ impl SingleDataSwap {
             rm: util::get_nibble(ins, 0) as usize
         }
     }
-}
 
-impl Instruction for SingleDataSwap {
-    fn get_type(&self) -> InstructionType { InstructionType::SingleDataSwap }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         if self.rn == 15 || self.rd == 15 || self.rm == 15 {
             panic!("can't use R15 as an operand");
         }

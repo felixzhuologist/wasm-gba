@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 use ::cpu::status_reg::CPUMode;
 use ::util;
@@ -22,11 +21,8 @@ impl BranchAndExchange {
             switch_to_thumb: util::get_bit(ins, 0)
         }
     }
-}
 
-impl Instruction for BranchAndExchange {
-    fn get_type(&self) -> InstructionType { InstructionType::BranchAndExchange }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         cpu.set_isa(self.switch_to_thumb);
         let jump_dest = cpu.get_reg(self.reg);
         cpu.set_reg(15, jump_dest);

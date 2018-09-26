@@ -1,4 +1,3 @@
-use super::{Instruction, InstructionType};
 use ::cpu::CPU;
 
 /// Cause a software interrupt trap to be taken, which switches to Supervisor mode,
@@ -9,11 +8,8 @@ impl SWInterrupt {
     pub fn parse_instruction(ins: u32) -> SWInterrupt {
         SWInterrupt { }
     }
-}
 
-impl Instruction for SWInterrupt {
-    fn get_type(&self) -> InstructionType { InstructionType::SWInterrupt }
-    fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) {
         unimplemented!()
     }
 }

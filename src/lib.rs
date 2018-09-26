@@ -1,3 +1,4 @@
+#![no_std]
 #![feature(reverse_bits)]
 
 #[macro_use]
