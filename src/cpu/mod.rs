@@ -52,8 +52,8 @@ impl CPUWrapper {
     /// Initialize CPU values assuming boot from GBA BIOS. In particular, with
     /// all regs zeroed out, and with CPSR in ARM and SVC modes with IRQ/FIQ bits
     /// set.
-    pub fn new() -> CPUWrapper {
-        let mut cpu = CPUWrapper {
+    pub const fn new() -> CPUWrapper {
+        CPUWrapper {
             cpu: CPU::new(),
             pipeline: [
                 PipelineInstruction::Empty,
@@ -61,12 +61,7 @@ impl CPUWrapper {
                 PipelineInstruction::Empty,
             ],
             idx: 0,
-        };
-        cpu.cpu.cpsr.i = false;
-        cpu.cpu.cpsr.f = false;
-        cpu.cpu.cpsr.mode = ProcessorMode:: SVC;
-
-        cpu
+        }
     }
 
     fn satisfies_cond(&self, cond: u32) -> bool {
@@ -173,14 +168,14 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new() -> CPU {
+    pub const fn new() -> CPU {
         CPU {
             r: [0; 16],
             r_fiq: [0; 7],
             r_irq: [0; 2],
-            r_und: [0, 2],
-            r_abt: [0, 2],
-            r_svc: [0, 2],
+            r_und: [0; 2],
+            r_abt: [0; 2],
+            r_svc: [0; 2],
 
             cpsr: PSR::new(),
             spsr_svc: PSR::new(),

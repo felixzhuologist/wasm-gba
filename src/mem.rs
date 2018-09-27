@@ -17,7 +17,7 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> Memory {
+    pub const fn new() -> Memory {
         Memory {
             sysrom: [0; 0x3FF],
             ewram: [0; 0x3FF],

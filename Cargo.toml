@@ -3,6 +3,14 @@ name = "gba"
 version = "0.1.0"
 authors = ["felixzhuologist <felix.czhu@gmail.com>"]
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
+wasm-bindgen = "0.2"
+wee_alloc = { version = "0.4.1", optional = true }
 enum_primitive = "0.1.1"
 num = "0.2"
+
+[profile.release]
+lto = true

@@ -64,7 +64,7 @@ pub struct PSR {
 }
 
 impl PSR {
-    pub fn new() -> PSR {
+    pub const fn new() -> PSR {
         PSR {
             n: false,
             z: false,
@@ -73,7 +73,7 @@ impl PSR {
             i: false,
             f: false,
             t: CPUMode::ARM,
-            mode: ProcessorMode::USR
+            mode: ProcessorMode::SVC
         }
     }
 

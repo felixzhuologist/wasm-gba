@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "start": "webpack-dev-server"
+  },
+  "devDependencies": {
+    "webpack": "^4.11.1",
+    "webpack-cli": "^3.1.1",
+    "webpack-dev-server": "^3.1.0"
+  }
+}

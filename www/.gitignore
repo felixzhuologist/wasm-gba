@@ -1,0 +1,5 @@
+node_modules/
+
+gba.d.ts
+gba.js
+gba_bg.wasm
