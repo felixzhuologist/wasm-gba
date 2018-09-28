@@ -1,11 +1,23 @@
 use util;
 
+pub mod io;
+
 pub struct Memory {
+    /// contains the BIOS
     sysrom: [u8; 0x3FF],
+    /// space for game data/code; largest area of RAM but memory transfers are
+    /// 16 bit wide which makes it slower than iwram
     ewram: [u8; 0x3FF],
+    /// fastest RAM segment which is internally embedded in the CPU chip package
+    /// with a 32 bit bus
     iwram: [u8; 0x7FF],
-    io: [u8; 0x3FE],
+    /// a mirror of the memory mapped ASIC registers on the GBA used to control
+    /// graphics, sound, DMA, timers, etc.
+    io: [u8; 0x3FF],
+    /// specifies 16 bit color values for the paletted modes
     pal: [u8; 0x3FF],
+    /// stores the frame buffer in bitmapped modes or the tile data/tile maps
+    /// in text, rotate/scale modes
     vram: [u8; 0x17FFF],
     oam: [u8; 0x3FF],
     // ROM in the game cartridge appears in this area
@@ -14,6 +26,10 @@ pub struct Memory {
     // either SRAM or flash ROM used for saving game data
     // TODO: allocate on the javascript side?
     // cart: Vec<u8>,
+
+    // these are parsed versions of raw data stored in memory that must be updated
+    // on write so that the values are in sync with the actual raw data
+    graphics: io::graphics::GraphicsIO,
 }
 
 impl Memory {
@@ -22,12 +38,14 @@ impl Memory {
             sysrom: [0; 0x3FF],
             ewram: [0; 0x3FF],
             iwram: [0; 0x7FF],
-            io: [0; 0x3FE],
+            io: [0; 0x3FF],
             pal: [0; 0x3FF],
             vram: [0; 0x17FFF],
             oam: [0; 0x3FF],
             // pak: Vec::new(),
             // cart: Vec::new(),
+
+            graphics: io::graphics::GraphicsIO::new(),
         }
     }
 
@@ -92,17 +110,26 @@ impl Memory {
     }
 
     pub fn set_byte(&mut self, addr: u32, val: u8) {
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_byte(addr, val);
+        }
         let (segment, idx) = self.get_loc_mut(addr);
         segment[idx] = val;
     }
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_halfword(addr, val);
+        }
         let (segment, idx) = self.get_loc_mut(addr);
         segment[idx] = util::get_byte(val, 0) as u8;
         segment[idx + 1] = util::get_byte(val, 8) as u8;
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_word(addr, val);
+        }
         let (segment, idx) = self.get_loc_mut(addr);
         segment[idx] = util::get_byte(val, 0) as u8;
         segment[idx + 1] = util::get_byte(val, 8) as u8;
