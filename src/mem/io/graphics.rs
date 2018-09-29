@@ -1,5 +1,21 @@
-use util;
+//! Background modes:
+//!     tile modes:
+//! 0: 4 tile layers (bg0 - bg3)
+//! 1: 2 tile layers + 1 rotates/scaled tile layer (bg0 - bg2)
+//! 2: 2 rotated/scaled tile layers (bg2, bg3)
+//!     bitmap modes (all use bg 2):
+//! 3: 240x160 15 bit bitmap with no page flip
+//! 4: 240x160 8 bit bitmap with page flip. the 8 bits here are an index into
+//!    the background palette at 0x5000000
+//! 5: 160x128 15 bit bitmap with page flip
 
+use super::addrs::*;
+use core::cmp::min;
+
+/// Contains all graphics related information from the LCD display I/O registers.
+/// The data in this struct is a mirror of the data from addresses
+/// 0x4000000 - 0x4000060, and is updated using set_byte() each time that segment
+/// of memory is updated.
 pub struct GraphicsIO {
     disp_cnt: DispCnt,
     disp_stat: DispStat,
@@ -9,12 +25,10 @@ pub struct GraphicsIO {
     bg_offset_x: [u16; 4],
     bg_offset_y: [u16; 4],
     bg_affine: [BgAffineParams; 2],
-    window_x: [u16; 2],
-    window_y: [u16; 2],
-    /// inside of window 0 and 1
-    win_in: [WindowSettings; 2],
-    /// outside window and sprite window
-    win_out: [WindowSettings; 2],
+
+    window_coords: [WindowCoords; 2],
+    // win0 inside, win1 inside, win0 outside, win1 outside
+    window_settings: [WindowSettings; 4],
 
     bg_mos_hsize: u8,
     bg_mos_vsize: u8,
@@ -22,9 +36,9 @@ pub struct GraphicsIO {
     obj_mos_vsize: u8,
     blend_params: BlendParams,
 
-    alpha_a_coef: i16,
-    alpha_b_coef: i16,
-    brightness_coef: i16,
+    alpha_a_coef: f32,
+    alpha_b_coef: f32,
+    brightness_coef: f32,
 }
 
 impl GraphicsIO {
@@ -45,13 +59,13 @@ impl GraphicsIO {
                 BgAffineParams::new(),
                 BgAffineParams::new(),
             ],
-            window_x: [0; 2],
-            window_y: [0; 2],
-            win_in: [
-                WindowSettings::new(),
-                WindowSettings::new(),
+            window_coords: [
+                WindowCoords::new(),
+                WindowCoords::new(),
             ],
-            win_out: [
+            window_settings: [
+                WindowSettings::new(),
+                WindowSettings::new(),
                 WindowSettings::new(),
                 WindowSettings::new(),
             ],
@@ -60,24 +74,180 @@ impl GraphicsIO {
             obj_mos_hsize: 0,
             obj_mos_vsize: 0,
             blend_params: BlendParams::new(),
-            alpha_a_coef: 0,
-            alpha_b_coef: 0,
-            brightness_coef: 0,
+            alpha_a_coef: 0.0,
+            alpha_b_coef: 0.0,
+            brightness_coef: 0.0,
         }
     }
 
-    pub fn set_byte(&mut self, addr: u32, val: u8) {
-        unimplemented!()
+    pub fn set_byte(&mut self, addr: u32, val: u8, raw: &[u8]) {
+        match addr {
+            DISPCNT_LO => {
+                if (val & 0x7) <= 5 {
+                    self.disp_cnt.bg_mode = val & 0x7;
+                }
+                self.disp_cnt.frame_base =
+                    if (val & 0x10) > 0 { 0x600A000 } else { 0x60000000 };
+                self.disp_cnt.hblank_interval_free = (val & 0x20) == 0x20;
+            },
+            DISPCNT_HI => {
+                for i in 0..4 {
+                    self.disp_cnt.bg_enabled[i] = (val & (1 << i)) > 0;
+                }
+                self.disp_cnt.window_enabled[0] = (val & 0x20) == 0x20;
+                self.disp_cnt.window_enabled[1] = (val & 0x40) == 0x40;
+                self.disp_cnt.obj_win_enabled = (val & 0x80) == 0x80;
+            },
+            DISPSTAT_LO => {
+                self.disp_stat.vblank_irq_enabled = (val & 0x8) == 0x8;
+                self.disp_stat.hblank_irq_enabled = (val & 0x10) == 0x10;
+                self.disp_stat.vcount_irq_enabled = (val & 0x20) == 0x20;
+            },
+            DISPSTAT_HI => {
+                self.disp_stat.vcount_line_trigger = val
+            },
+            BGCNT_START...BGCNT_END => {
+                let bg = ((addr - BGCNT_START) / 2) as usize;
+                if addr % 2 == 1 { // high byte
+                    self.bg_cnt[bg].map_addr =
+                        0x6000000 + (val as u32 & 0x1F)*0x800;
+                    self.bg_cnt[bg].overflow = (val & 0x20) == 0x20;
+                    let (width, height) = match val >> 6 { // upper 2 bits
+                        0 => (256, 256),
+                        1 => (512, 256),
+                        2 => (256, 512),
+                        3 => (512, 512),
+                        _ => panic!("should not get here")
+                    };
+                    self.bg_cnt[bg].width = width;
+                    self.bg_cnt[bg].height = height;
+                } else { // low byte
+                    self.bg_cnt[bg].priority = val & 3;
+                    self.bg_cnt[bg].tile_addr =
+                        0x6000000 + ((val >> 2) as u32 & 3)*0x4000;
+                    self.bg_cnt[bg].mosaic_enabled = (val & 0x40) == 0x40;
+                    self.bg_cnt[bg].depth = if val >= 8 { 8 } else { 4 };
+                }
+            },
+            BG_OFFSET_START...BG_OFFSET_END => {
+                let bg = ((addr - BG_OFFSET_START) / 4) as usize;
+                if (addr & 0x20) == 0 { // horizontal coord
+                    if (addr % 2) == 0 { // low byte
+                        self.bg_offset_x[bg] &= 0xFF00;
+                        self.bg_offset_x[bg] |= val as u16;
+                    } else { // high byte
+                        self.bg_offset_x[bg] &= 0x00FF;
+                        self.bg_offset_x[bg] |= (val as u16 & 3) << 8;
+                    }
+                } else { // vertical coord
+                    if (addr % 2) == 0 { // low byte
+                        self.bg_offset_y[bg] &= 0xFF00;
+                        self.bg_offset_y[bg] |= val as u16;
+                    } else { // high byte
+                        self.bg_offset_y[bg] &= 0x00FF;
+                        self.bg_offset_y[bg] |= (val as u16 & 3) << 8;
+                    }
+                }
+            },
+            BG_AFFINE_START...BG_AFFINE_END => {
+                let addr = addr as usize;
+                let bg = (addr - BG_AFFINE_START as usize) / 10;
+                let hw_raw =
+                    (raw[addr - (addr % 2)] as u16) |
+                    (raw[addr - (addr % 2) + 1] as u16) << 8;
+                let word_raw =
+                    (raw[addr - (addr % 4)] as u32) |
+                    (raw[addr - (addr % 4) + 1] as u32) << 8 |
+                    (raw[addr - (addr % 4) + 2] as u32) << 16 |
+                    (raw[addr - (addr % 4) + 3] as u32) << 24;
+                match addr % 16 {
+                    0...1 => self.bg_affine[bg].dx = to_float_hw(hw_raw),
+                    2...3 => self.bg_affine[bg].dmx = to_float_hw(hw_raw),
+                    4...5 => self.bg_affine[bg].dy = to_float_hw(hw_raw),
+                    6...7 => self.bg_affine[bg].dmy = to_float_hw(hw_raw),
+                    8...12 => self.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    13...15 => self.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    _ => panic!("should not get here")
+                }
+            },
+            WIN_COORD_START...WIN_COORD_END => {
+                match addr - WIN_COORD_START {
+                    0 => self.window_coords[0].right = min(val, 240),
+                    1 => self.window_coords[0].left = val,
+                    2 => self.window_coords[1].right = min(val, 240),
+                    3 => self.window_coords[1].left = val,
+                    4 => self.window_coords[0].bottom = min(val, 160),
+                    5 => self.window_coords[0].top = val,
+                    6 => self.window_coords[1].bottom = min(val, 160),
+                    7 => self.window_coords[1].top = val,
+                    _ => panic!("should not get here")
+                }
+
+                let bg = ((addr >> 1) & 1) as usize;
+                let mut coords = &mut self.window_coords[bg];
+                // TODO: this is done differently in GBE?
+                if coords.left < coords.right {
+                    coords.right = 240;
+                }
+                if coords.bottom < coords.top {
+                    coords.bottom = 160;
+                }
+            },
+            WIN_SETTINGS_START...WIN_SETTINGS_END => {
+                let mut settings = &mut self.window_settings[(addr % 8) as usize];
+                settings.bg[0] = (val & 1) == 1;
+                settings.bg[1] = (val & 2) == 2;
+                settings.bg[2] = (val & 4) == 4;
+                settings.bg[3] = (val & 8) == 8;
+                settings.sprite = (val & 16) == 16;
+                settings.blend =  (val & 32) == 32;
+            },
+            MOSAIC_LO => {
+                self.bg_mos_hsize = val & 0xF;
+                self.bg_mos_vsize = val >> 4;
+            },
+            MOSAIC_HI => {
+                self.obj_mos_hsize = val & 0xF;
+                self.obj_mos_vsize = val >> 4;
+            },
+            BLDCNT_LO => {
+                self.blend_params.source[0] = (val & 1) == 1;
+                self.blend_params.source[1] = (val & 2) == 2;
+                self.blend_params.source[2] = (val & 4) == 4;
+                self.blend_params.source[3] = (val & 8) == 8;
+                self.blend_params.source[4] = (val & 16) == 16;
+                self.blend_params.source[5] = (val & 32) == 32;
+                self.blend_params.mode = match val >> 6 {
+                    0 => BlendType::Off,
+                    1 => BlendType::AlphaBlend,
+                    2 => BlendType::Lighten,
+                    3 => BlendType::Darken,
+                    _ => panic!("should not get here"),
+                };
+            },
+            BLDCNT_HI => {
+                self.blend_params.target[0] = (val & 1) == 1;
+                self.blend_params.target[1] = (val & 2) == 2;
+                self.blend_params.target[2] = (val & 4) == 4;
+                self.blend_params.target[3] = (val & 8) == 8;
+                self.blend_params.target[4] = (val & 16) == 16;
+                self.blend_params.target[5] = (val & 32) == 32;
+            },
+            BLDALPHA_LO => { self.alpha_a_coef = to_coeff(val); },
+            BLDALPHA_HI => { self.alpha_b_coef = to_coeff(val); },
+            BLDY => { self.brightness_coef = to_coeff(val); },
+            _ => () // unused
+        }
     }
 
-    pub fn set_halfword(&mut self, addr: u32, val: u32) {
-        self.set_byte(addr, val as u8);
-        self.set_byte(addr + 1, (val >> 8) as u8);
+    pub fn set_halfword(&mut self, addr: u32, val: u32, raw: &[u8]) {
+        self.set_byte(addr, val as u8, raw);
+        self.set_byte(addr + 1, (val >> 8) as u8, raw);
     }
 
-    pub fn set_word(&mut self, addr: u32, val: u32) {
-        self.set_halfword(addr, val);
-        self.set_halfword(addr + 1, (val >> 16));
+    pub fn set_word(&mut self, addr: u32, val: u32, raw: &[u8]) {
+        self.set_halfword(addr, val, raw);
+        self.set_halfword(addr + 1, val >> 16, raw);
     }
 }
 
@@ -94,14 +264,11 @@ struct DispCnt {
     /// 0-2 (M) = The video mode
     bg_mode: u8,
     /// 4   (A) = This bit controls the starting address of the bitmap in bitmapped modes
-    ///           and is used for page flipping. See the description of the specific
-    ///           video mode for details.
+    ///           (mode 4 and 5) and is used for page flipping (the user can update
+    ///            one of the frames while display the other, then switch)
     frame_base: u32,
-    /// 5   (B) = Force processing during hblank. Setting this causes the display
-    ///           controller to process data earlier and longer, beginning from the end of
-    ///           the previous scanline up to the end of the current one. This added
-    ///           processing time can help prevent flickering when there are too many
-    ///           sprites on a scanline.
+    /// 5   (B) = if set, allow access to access VRAM/OAM/PAL sections of memory
+    ///           during HBlank
     hblank_interval_free: bool,
     /// 6   (D) = Sets whether sprites stored in VRAM use 1 dimension or 2.
     ///           1 - 1d: tiles are are stored sequentially 
@@ -180,32 +347,13 @@ impl DispStat {
 /// F E D C  B A 9 8  7 6 5 4  3 2 1 0 
 /// Z Z V M  M M M M  A C X X  S S P P 
 struct BgCnt {
-    /// 0-1 (P) = Priority - 00 highest, 11 lowest
-    ///           Priorities are ordered as follows:
-
-    ///           "Front"
-    ///           1. Sprite with priority 0
-    ///           2. BG with     priority 0
-
-    ///           3. Sprite with priority 1
-    ///           4. BG with     priority 1
-
-    ///           5. Sprite with priority 2
-    ///           6. BG with     priority 2
-
-    ///           7. Sprite with priority 3
-    ///           8. BG with     priority 3
-
-    ///           9. Backdrop
-    ///           "Back"
-
+    /// 0-1 (P) = Priority - 0 highest, 3 is the lowest
     ///           When multiple backgrounds have the same priority, the order
     ///           from front to back is:  BG0, BG1, BG2, BG3.  Sprites of the same
     ///           priority are ordered similarly, with the first sprite in OAM
     ///           appearing in front.
     priority: u8,
     /// 2-3 (S) = Starting address of character tile data
-    ///           Address = 0x6000000 + S * 0x4000
     tile_addr: u32,
     /// 6   (C) = Mosiac effect - 1 on, 0 off
     mosaic_enabled: bool,
@@ -213,7 +361,7 @@ struct BgCnt {
     ///           1 - standard 256 color pallete
     ///           0 - each tile uses one of 16 different 16 color palettes (no effect on
     ///               rotates/scale backgrounds, which are always 256 color)
-    full_depth: bool,
+    depth: u8,
     /// 8-C (M) = Starting address of character tile map
     ///           Address = 0x6000000 + M * 0x800
     map_addr: u32,
@@ -244,7 +392,7 @@ impl BgCnt {
             priority: 0,
             tile_addr: 0,
             mosaic_enabled: false,
-            full_depth: false,
+            depth: 8,
             map_addr: 0,
             overflow: false,
             width: 0,
@@ -254,26 +402,47 @@ impl BgCnt {
 }
 
 struct BgAffineParams {
-    pub dx: i16,
-    pub dmx: i16,
-    pub dy: i16,
-    pub dmy: i16,
-    pub x_ref: i16,
-    pub y_ref: i16,
+    dx: f32,
+    dmx: f32,
+    dy: f32,
+    dmy: f32,
+    ref_x: f32,
+    ref_y: f32,
 }
 
 impl BgAffineParams {
     pub const fn new() -> BgAffineParams {
         BgAffineParams {
-            dx: 0,
-            dmx: 0,
-            dy: 0,
-            dmy: 0,
-            x_ref: 0,
-            y_ref: 0,      
+            dx: 0.0,
+            dmx: 0.0,
+            dy: 0.0,
+            dmy: 0.0,
+            ref_x: 0.0,
+            ref_y: 0.0,      
         }
     }
 }
+
+/// Specifies the corners of a window. Note that the upper number is exclusive
+/// and the lower number is inclusive (i.e. x in [left, right))
+struct WindowCoords {
+    top: u8,
+    bottom: u8,
+    left: u8,
+    right: u8,
+}
+
+impl WindowCoords {
+    pub const fn new() -> WindowCoords {
+        WindowCoords {
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+        }
+    }
+}
+
 struct WindowSettings {
     pub bg: [bool; 4],
     pub sprite: bool,
@@ -302,15 +471,45 @@ impl BlendParams {
     pub const fn new() -> BlendParams {
         BlendParams {
             source: [false; 6],
-            mode: BlendType::Normal,
+            mode: BlendType::Off,
             target: [false; 6]
         }
     }
 }
 
 enum BlendType {
-    Normal,
+    Off,
     AlphaBlend,
-    BrightnessUp,
-    BrightnessDown,
+    Lighten,
+    Darken,
+}
+
+/// parse the following format into a float:
+/// F E D C  B A 9 8  7 6 5 4  3 2 1 0 
+/// S I I I  I I I I  F F F F  F F F F 
+/// 0-7 (F) = Fraction 
+/// 8-E (I) = Integer 
+/// F   (S) = Sign bit 
+fn to_float_hw(raw: u16) -> f32 {
+    let int = (raw >> 8) as i8 as f32;
+    let frac = ((raw & 0xFF) as f32) / 256.0;
+    int + frac
+}
+
+/// parse the following format into a float:
+/// 27 26 25 24  23 22 21 20  19 18 17 16  15 14 13 12  11 10 9 8  7 6 5 4  3 2 1 0
+/// S  I  I  I   I  I  I  I   I  I  I  I   I  I  I  I   I  I  I I  F F F F  F F F F 
+/// 0-7  (F) - Fraction 
+/// 8-26 (I) - Integer 
+/// 27   (S) - Sign bit 
+fn to_float_word(raw: u32) -> f32 {
+    let mut int = (raw >> 8) & 0x7FFFF; // set I bits
+    int |= (raw << 4) & 0x80000000; // set sign bit
+    let frac = ((raw & 0xFF) as f32) / 256.0;
+    (int as i32 as f32) + frac
+}
+
+/// takes a 5 bit value and parses it as an effect coefficent
+fn to_coeff(raw: u8) -> f32 {
+    (min(raw, 16) as f32) / 16.0
 }

@@ -1,6 +1,8 @@
-use util;
-
+mod addrs;
 pub mod io;
+
+use util;
+use self::addrs::*;
 
 pub struct Memory {
     /// contains the BIOS
@@ -19,6 +21,8 @@ pub struct Memory {
     /// stores the frame buffer in bitmapped modes or the tile data/tile maps
     /// in text, rotate/scale modes
     vram: [u8; 0x17FFF],
+    /// stores the objects/sprites. PAL/VRAM/OAM segments of memory are only
+    /// accessible during HBlank/VBlank periods (i.e. when not drawing)
     oam: [u8; 0x3FF],
     // ROM in the game cartridge appears in this area
     // TODO: allocate on the javascript side?
@@ -54,13 +58,13 @@ impl Memory {
     pub fn get_loc(&self, addr: u32) -> (&[u8], usize) {
         // TODO: use addr / 0x01000000 instead of a match statement?
         let result: (&[u8], u32) = match addr {
-            0x00000000...0x00003FFF => (&self.sysrom, addr),
-            0x02000000...0x0203FFFF => (&self.ewram, addr - 0x02000000),
-            0x03000000...0x03007FFF => (&self.iwram, addr - 0x03000000),
-            0x04000000...0x040003FF => (&self.io, addr - 0x04000000),
-            0x05000000...0x050003FF => (&self.pal, addr - 0x05000000),
-            0x06000000...0x06017FFF => (&self.vram, addr - 0x06000000),
-            0x07000000...0x070003FF => (&self.oam, addr - 0x07000000),
+            SYSROM_START...SYSROM_END => (&self.sysrom, addr),
+            EWRAM_START...EWRAM_END => (&self.ewram, addr - EWRAM_START),
+            IWRAM_START...IWRAM_END => (&self.iwram, addr - IWRAM_START),
+            IO_START...IO_END => (&self.io, addr - IO_START),
+            PAL_START...PAL_END => (&self.pal, addr - PAL_START),
+            VRAM_START...VRAM_END => (&self.vram, addr - VRAM_START),
+            OAM_START...OAM_END => (&self.oam, addr - OAM_START),
             // TODO: ROM data
             0x08000000...0x09FFFFFF => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
@@ -74,13 +78,13 @@ impl Memory {
     pub fn get_loc_mut(&mut self, addr: u32) -> (&mut [u8], usize) {
         // TODO: use addr / 0x01000000 instead of a match statement?
         let result: (&mut [u8], u32) = match addr {
-            0x00000000...0x00003FFF => (&mut self.sysrom, addr),
-            0x02000000...0x0203FFFF => (&mut self.ewram, addr - 0x02000000),
-            0x03000000...0x03007FFF => (&mut self.iwram, addr - 0x03000000),
-            0x04000000...0x040003FF => (&mut self.io, addr - 0x04000000),
-            0x05000000...0x050003FF => (&mut self.pal, addr - 0x05000000),
-            0x06000000...0x06017FFF => (&mut self.vram, addr - 0x06000000),
-            0x07000000...0x070003FF => (&mut self.oam, addr - 0x07000000),
+            SYSROM_START...SYSROM_END => (&mut self.sysrom, addr),
+            EWRAM_START...EWRAM_END => (&mut self.ewram, addr - EWRAM_START),
+            IWRAM_START...IWRAM_END => (&mut self.iwram, addr - IWRAM_START),
+            IO_START...IO_END => (&mut self.io, addr - IO_START),
+            PAL_START...PAL_END => (&mut self.pal, addr - PAL_START),
+            VRAM_START...VRAM_END => (&mut self.vram, addr - VRAM_START),
+            OAM_START...OAM_END => (&mut self.oam, addr - OAM_START),
             // TODO: ROM data
             0x08000000...0x09FFFFFF => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
@@ -110,31 +114,37 @@ impl Memory {
     }
 
     pub fn set_byte(&mut self, addr: u32, val: u8) {
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_byte(addr, val);
+        {
+            let (segment, idx) = self.get_loc_mut(addr);
+            segment[idx] = val;
         }
-        let (segment, idx) = self.get_loc_mut(addr);
-        segment[idx] = val;
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_byte(addr, val, &self.io);
+        }
     }
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_halfword(addr, val);
+        {
+            let (segment, idx) = self.get_loc_mut(addr);
+            segment[idx] = util::get_byte(val, 0) as u8;
+            segment[idx + 1] = util::get_byte(val, 8) as u8;
         }
-        let (segment, idx) = self.get_loc_mut(addr);
-        segment[idx] = util::get_byte(val, 0) as u8;
-        segment[idx + 1] = util::get_byte(val, 8) as u8;
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_halfword(addr, val, &self.io);
+        }
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_word(addr, val);
+        {
+            let (segment, idx) = self.get_loc_mut(addr);
+            segment[idx] = util::get_byte(val, 0) as u8;
+            segment[idx + 1] = util::get_byte(val, 8) as u8;
+            segment[idx + 2] = util::get_byte(val, 16) as u8;
+            segment[idx + 3] = util::get_byte(val, 24) as u8;
         }
-        let (segment, idx) = self.get_loc_mut(addr);
-        segment[idx] = util::get_byte(val, 0) as u8;
-        segment[idx + 1] = util::get_byte(val, 8) as u8;
-        segment[idx + 2] = util::get_byte(val, 16) as u8;
-        segment[idx + 3] = util::get_byte(val, 24) as u8;
+        if addr >= 0x04000000 && addr <= 0x040003FF {
+            self.graphics.set_word(addr, val, &self.io[..0x60]);
+        }
     }
 }
 

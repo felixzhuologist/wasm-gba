@@ -1,0 +1,14 @@
+pub const SYSROM_START: u32 = 0x00000000;
+pub const SYSROM_END: u32 = 0x00003FFF;
+pub const EWRAM_START: u32 = 0x02000000;
+pub const EWRAM_END: u32 = 0x0203FFFF;
+pub const IWRAM_START: u32 = 0x03000000;
+pub const IWRAM_END: u32 = 0x03007FFF;
+pub const IO_START: u32 = 0x04000000;
+pub const IO_END: u32 = 0x040003FF;
+pub const PAL_START: u32 = 0x05000000;
+pub const PAL_END: u32 = 0x050003FF;
+pub const VRAM_START: u32 = 0x06000000;
+pub const VRAM_END: u32 = 0x06017FFF;
+pub const OAM_START: u32 = 0x07000000;
+pub const OAM_END: u32 = 0x070003FF;
