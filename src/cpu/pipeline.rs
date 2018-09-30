@@ -25,7 +25,9 @@ use self::Instruction::{
     SWInterrupt,
 };
 use ::cpu::thumb;
+use ::cpu::status_reg::PSR;
 use util;
+use num::FromPrimitive;
 
 /// An instruction in a specific stage of the ARM7's three stage pipeline
 pub enum PipelineInstruction {
@@ -143,6 +145,50 @@ pub enum Instruction {
     BranchEx(branch_ex::BranchAndExchange),
     SWInterrupt(swi::SWInterrupt),
     Noop
+}
+
+
+
+/// Return whether the current state of the CPU's flags matches the given condition
+pub fn satisfies_cond(cpsr: &PSR, cond: u32) -> bool {
+    match CondField::from_u32(cond).unwrap() {
+        CondField::EQ => cpsr.z,
+        CondField::NE => !cpsr.z,
+        CondField::CS => cpsr.c,
+        CondField::CC => !cpsr.c,
+        CondField::MI => cpsr.n,
+        CondField::PL => !cpsr.n,
+        CondField::VS => cpsr.v,
+        CondField::VC => !cpsr.v,
+        CondField::HI => cpsr.c && !cpsr.v,
+        CondField::LS => !cpsr.c || cpsr.v,
+        CondField::GE => cpsr.n == cpsr.v,
+        CondField::LT => cpsr.n != cpsr.v,
+        CondField::GT => !cpsr.z && (cpsr.n == cpsr.v),
+        CondField::LE => cpsr.z || (cpsr.n != cpsr.v),
+        CondField::AL => true
+    }
+}
+
+enum_from_primitive! {
+#[repr(u8)]
+pub enum CondField {
+    EQ = 0,
+    NE,
+    CS,
+    CC,
+    MI,
+    PL,
+    VS,
+    VC,
+    HI,
+    LS,
+    GE,
+    LT,
+    GT,
+    LE,
+    AL
+}
 }
 
 #[cfg(test)]

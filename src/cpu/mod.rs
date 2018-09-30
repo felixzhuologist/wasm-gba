@@ -6,7 +6,12 @@ pub mod status_reg;
 use self::arm::RegOrImm;
 use self::arm::data::apply_shift;
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
-use self::pipeline::{decode_arm, decode_thumb, PipelineInstruction};
+use self::pipeline::{
+    decode_arm,
+    decode_thumb,
+    PipelineInstruction,
+    satisfies_cond
+};
 use self::pipeline::Instruction::{
     DataProc,
     PSRTransfer,
@@ -23,7 +28,6 @@ use self::pipeline::Instruction::{
 };
 use mem;
 use util;
-use num::FromPrimitive;
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
@@ -68,27 +72,6 @@ impl CPUWrapper {
         }
     }
 
-    fn satisfies_cond(&self, cond: u32) -> bool {
-        let cpsr = &self.cpu.cpsr;
-        match CondField::from_u32(cond).unwrap() {
-            CondField::EQ => cpsr.z,
-            CondField::NE => !cpsr.z,
-            CondField::CS => cpsr.c,
-            CondField::CC => !cpsr.c,
-            CondField::MI => cpsr.n,
-            CondField::PL => !cpsr.n,
-            CondField::VS => cpsr.v,
-            CondField::VC => !cpsr.v,
-            CondField::HI => cpsr.c && !cpsr.v,
-            CondField::LS => !cpsr.c || cpsr.v,
-            CondField::GE => cpsr.n == cpsr.v,
-            CondField::LT => cpsr.n != cpsr.v,
-            CondField::GT => !cpsr.z && (cpsr.n == cpsr.v),
-            CondField::LE => cpsr.z || (cpsr.n != cpsr.v),
-            CondField::AL => true
-        }
-    }
-
     pub fn fetch(&mut self) {
         let pc = self.cpu.get_reg(15);
         self.pipeline[self.idx] = if self.cpu.cpsr.t == CPUMode::THUMB {
@@ -107,7 +90,7 @@ impl CPUWrapper {
             PipelineInstruction::RawARM(n) => {
                 let cond = util::get_nibble(n, 28);
                 self.pipeline[idx] = PipelineInstruction::Decoded(
-                    if self.satisfies_cond(cond) {
+                    if satisfies_cond(&self.cpu.cpsr, cond) {
                         decode_arm(n).unwrap()
                     } else {
                         Noop
@@ -343,27 +326,6 @@ impl CPU {
             }
         } 
     }
-}
-
-enum_from_primitive! {
-#[repr(u8)]
-pub enum CondField {
-    EQ = 0,
-    NE,
-    CS,
-    CC,
-    MI,
-    PL,
-    VS,
-    VC,
-    HI,
-    LS,
-    GE,
-    LT,
-    GT,
-    LE,
-    AL
-}
 }
 
 pub struct TransferParams<'a> {
