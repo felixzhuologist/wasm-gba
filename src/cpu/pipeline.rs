@@ -1,16 +1,3 @@
-use ::cpu::arm::{
-    block_trans,
-    branch,
-    branch_ex,
-    data,
-    mul,
-    mul_long,
-    psr,
-    signed_trans,
-    single_trans,
-    swap,
-    swi,
-};
 use self::Instruction::{
     DataProc,
     PSRTransfer,
@@ -23,6 +10,19 @@ use self::Instruction::{
     Branch,
     BranchEx,
     SWInterrupt,
+};
+use ::cpu::arm::{
+    block_trans,
+    branch,
+    branch_ex,
+    data,
+    mul,
+    mul_long,
+    psr,
+    signed_trans,
+    single_trans,
+    swap,
+    swi,
 };
 use ::cpu::thumb;
 use ::cpu::status_reg::PSR;
@@ -144,6 +144,7 @@ pub enum Instruction {
     Branch(branch::Branch),
     BranchEx(branch_ex::BranchAndExchange),
     SWInterrupt(swi::SWInterrupt),
+    CondBranch(thumb::CondBranch),
     Noop
 }
 

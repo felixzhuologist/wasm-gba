@@ -9,22 +9,9 @@ use self::status_reg::{CPUMode, PSR, ProcessorMode};
 use self::pipeline::{
     decode_arm,
     decode_thumb,
+    Instruction,
     PipelineInstruction,
     satisfies_cond
-};
-use self::pipeline::Instruction::{
-    DataProc,
-    PSRTransfer,
-    Multiply,
-    MultiplyLong,
-    SwapTransfer,
-    SingleTransfer,
-    SignedTransfer,
-    BlockTransfer,
-    Branch,
-    BranchEx,
-    SWInterrupt,
-    Noop
 };
 use mem;
 use util;
@@ -93,7 +80,7 @@ impl CPUWrapper {
                     if satisfies_cond(&self.cpu.cpsr, cond) {
                         decode_arm(n).unwrap()
                     } else {
-                        Noop
+                        Instruction::Noop
                     })
             },
             PipelineInstruction::RawTHUMB(n) => {
@@ -109,18 +96,19 @@ impl CPUWrapper {
         let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
         if let PipelineInstruction::Decoded(ref ins) = self.pipeline[idx] {
             match ins {
-                DataProc(ins) => ins.run(&mut self.cpu),
-                PSRTransfer(ins) => ins.run(&mut self.cpu),
-                Multiply(ins) => ins.run(&mut self.cpu),
-                MultiplyLong(ins) => ins.run(&mut self.cpu),
-                SwapTransfer(ins) => ins.run(&mut self.cpu),
-                SingleTransfer(ins) => ins.run(&mut self.cpu),
-                SignedTransfer(ins) => ins.run(&mut self.cpu),
-                BlockTransfer(ins) => ins.run(&mut self.cpu),
-                Branch(ins) => ins.run(&mut self.cpu),
-                BranchEx(ins) => ins.run(&mut self.cpu),
-                SWInterrupt(ins) => ins.run(&mut self.cpu),
-                Noop => (),
+                Instruction::DataProc(ins) => ins.run(&mut self.cpu),
+                Instruction::PSRTransfer(ins) => ins.run(&mut self.cpu),
+                Instruction::Multiply(ins) => ins.run(&mut self.cpu),
+                Instruction::MultiplyLong(ins) => ins.run(&mut self.cpu),
+                Instruction::SwapTransfer(ins) => ins.run(&mut self.cpu),
+                Instruction::SingleTransfer(ins) => ins.run(&mut self.cpu),
+                Instruction::SignedTransfer(ins) => ins.run(&mut self.cpu),
+                Instruction::BlockTransfer(ins) => ins.run(&mut self.cpu),
+                Instruction::Branch(ins) => ins.run(&mut self.cpu),
+                Instruction::BranchEx(ins) => ins.run(&mut self.cpu),
+                Instruction::SWInterrupt(ins) => ins.run(&mut self.cpu),
+                Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
+                Instruction::Noop => (),
             }
         }
     }
@@ -191,6 +179,13 @@ impl CPU {
     pub fn incr_pc(&mut self) {
         let offset = if self.cpsr.t == CPUMode::THUMB { 2 } else { 4 };
         self.r[15] += offset;
+    }
+
+    /// Add a signed offset to the PC
+    pub fn modify_pc(&mut self, offset: i64) {
+        // cast pc to i64 to avoid interpreting it as negative number
+        self.r[15] = (self.r[15] as i64 + offset as i64) as u32;
+        self.should_flush = true;
     }
 
     pub fn get_reg(&self, reg: usize) -> u32 {

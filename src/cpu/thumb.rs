@@ -1,4 +1,5 @@
 use num::FromPrimitive;
+use ::cpu::CPU;
 use ::cpu::arm::RegOrImm;
 use ::cpu::arm::data::{DataProc, Op};
 use ::cpu::arm::branch::Branch;
@@ -8,7 +9,7 @@ use ::cpu::arm::single_trans::SingleDataTransfer;
 use ::cpu::arm::signed_trans::SignedDataTransfer;
 use ::cpu::arm::block_trans::BlockDataTransfer;
 use ::cpu::arm::swi::SWInterrupt;
-use ::cpu::pipeline::Instruction;
+use ::cpu::pipeline::{Instruction, satisfies_cond};
 use ::util;
 
 /// format 1:
@@ -367,8 +368,28 @@ pub fn block_trans(raw: u16) -> Instruction {
 /// 15 | 14 | 13 | 12 | 11 .. 8 | 7 .. 0
 /// 1  | 1  | 0  | 1  |  cond   | soffset8
 pub fn cond_branch(raw: u16) -> Instruction {
-    // TODO: add new THUMB specific instruction
-    unimplemented!()
+    let mut offset = raw & 0xFF;
+    if util::get_bit_hw(offset, 7) {
+        offset |= 0xFF00;
+    }
+
+    Instruction::CondBranch(CondBranch {
+        cond: (raw >> 8) & 0xF,
+        offset: offset as i16,
+    })
+}
+
+pub struct CondBranch { pub cond: u16, offset: i16 }
+
+// for ARM instructions the condition is checked while decoding but for THUMB
+// instructions they are checked during execution, since only one THUMB
+// instruction is executed conditionally
+impl CondBranch {
+    pub fn run(&self, cpu: &mut CPU) {
+        if satisfies_cond(&cpu.cpsr, self.cond as u32) {
+            cpu.modify_pc(self.offset as i64);
+        }
+    }
 }
 
 /// format 17: SWI
@@ -399,6 +420,14 @@ pub fn branch(raw: u16) -> Instruction {
 pub fn long_branch(raw: u16) -> Instruction {
     // TODO: add new THUMB specific instruction
     unimplemented!()
+}
+
+pub struct LongBranch { pub first: bool, offset: u16 }
+
+impl LongBranch {
+    pub fn run(&self, cpu: &mut CPU) {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

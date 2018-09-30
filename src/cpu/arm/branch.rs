@@ -39,10 +39,7 @@ impl Branch {
             cpu.set_reg(14, ret);
         }
 
-        // cast pc to i64 to avoid interpreting it as negative number
-        let pc = (cpu.get_reg(15) as i64) + self.offset as i64;
-        cpu.set_reg(15, pc as u32);
-        cpu.should_flush = true;
+        cpu.modify_pc(self.offset as i64);
     }
 }
 
