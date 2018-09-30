@@ -47,7 +47,7 @@ pub enum CPUMode {
 /// I = 1 disables the IRQ
 /// F = 1 disables the FIQ
 /// T = 0 means the processor is in ARM state, and in THUMB state otherwise
-/// M[4:0] is the processor mode, as defined above
+/// M[4..0] is the processor mode, as defined above
 ///
 /// in this implementation we unpack the 32 bits to avoid having to do bit
 /// manipulation each time we want to get a specific flag, at the expense of

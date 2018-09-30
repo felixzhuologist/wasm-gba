@@ -1,3 +1,10 @@
+//! THUMB instructions
+//!
+//! Almost all THUMB instructions can be implemented as ARM instructions, so
+//! most functions here simply decode a raw instruction into the appropriate
+//! ARM instruction. The exceptions are format 16 (conditional brancH) and
+//! format 19 (long branch), which have their own Instruction enum branches.
+
 use num::FromPrimitive;
 use ::cpu::CPU;
 use ::cpu::arm::RegOrImm;
