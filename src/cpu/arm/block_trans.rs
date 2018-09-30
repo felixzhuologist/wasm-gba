@@ -5,19 +5,19 @@ use ::util;
 /// Load or store any subset of the currently visible registers
 pub struct BlockDataTransfer {
     /// if true, add offset before transfer else add after
-    pre_index: bool,
+    pub pre_index: bool,
     /// if true, add the offset to base, else subtract it
-    offset_up: bool,
+    pub offset_up: bool,
     /// if true, CPSR or force user mode (depending on other parameters)
-    force: bool,
+    pub force: bool,
     /// if true, write address back to base reg, else do nothing
-    write_back: bool,
+    pub write_back: bool,
     /// if true, load from memory, else write to memory
-    load: bool,
+    pub load: bool,
     /// base register
-    rn: usize,
+    pub rn: usize,
     /// bit i of the register list being set means that register i should be transferred
-    register_list: u16
+    pub register_list: u16
 }
 
 impl BlockDataTransfer {

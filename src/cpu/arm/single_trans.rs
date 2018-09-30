@@ -5,25 +5,27 @@ use ::util;
 /// Load or store a single byte/word to/from memory. The memory address is
 /// calculated by adding/subtracting an offset from a base register, which can
 /// be written back into the base register if auto-indexing is required
+// TODO: what happens when write_back is true during a load into the base reg?
+//       which one takes precedence?
 pub struct SingleDataTransfer {
     /// if true, add offset before transfer else add after
-    pre_index: bool,
+    pub pre_index: bool,
     /// if true, add the offset to base, else subtract it
-    offset_up: bool,
+    pub offset_up: bool,
     /// if true, transfer byte, else transfer word
-    byte: bool,
+    pub byte: bool,
     /// if true, write address back to base reg, else do nothing
-    write_back: bool,
+    pub write_back: bool,
     /// if true, load from memory, else write to memory
-    load: bool,
+    pub load: bool,
     /// base register
-    rn: usize,
+    pub rn: usize,
     /// source/destination register
-    rd: usize,
+    pub rd: usize,
     /// offset which is either a 12 bit immediate value, or a shifted register.
     /// note that specifying shift amount using another register is not supported
     /// for this instruction
-    offset: RegOrImm,
+    pub offset: RegOrImm,
 }
 
 impl SingleDataTransfer {

@@ -1,10 +1,11 @@
 use num::FromPrimitive;
 use super::RegOrImm;
 use ::cpu::CPU;
+use ::cpu::status_reg::CPUMode;
 use ::util;
 
 enum_from_primitive! {
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Op {
     AND = 0,
@@ -29,9 +30,9 @@ pub enum Op {
 pub struct DataProc {
     pub opcode: Op,
     pub set_flags: bool,
-    rn: usize,
-    rd: usize,
-    op2: RegOrImm
+    pub rn: usize,
+    pub rd: usize,
+    pub op2: RegOrImm
 }
 
 const MAX: u32 = 0xFFFFFFFF;
@@ -62,7 +63,11 @@ impl DataProc {
     }
 
     pub fn run(&self, cpu: &mut CPU) {
-        let op1 = cpu.get_reg(self.rn);
+        let mut op1 = cpu.get_reg(self.rn);
+        if cpu.cpsr.t == CPUMode::THUMB && self.rn == 15 {
+            // TODO: this is probably only for the load_addr THUMB instruction...
+            op1 &= !2;
+        }
         let (op2, shift_carry) = match self.op2 {
             RegOrImm::Imm { rotate, value } => {
                 let result = value.rotate_right(rotate * 2);

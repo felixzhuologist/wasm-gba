@@ -25,6 +25,7 @@ pub enum Instruction {
     Noop
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum RegOrImm {
     Imm { rotate: u32, value: u32 },
     Reg { shift: u32, reg: u32 }

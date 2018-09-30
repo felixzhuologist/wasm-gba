@@ -6,12 +6,12 @@ use ::util;
 /// result in Rd
 pub struct Multiply {
     /// if true, add contents of Rn to the product before storing in Rd
-    accumulate: bool,
-    set_flags: bool,
-    rd: usize,
-    rn: usize,
-    rs: usize,
-    rm: usize
+    pub accumulate: bool,
+    pub set_flags: bool,
+    pub rd: usize,
+    pub rn: usize,
+    pub rs: usize,
+    pub rm: usize
 }
 
 impl Multiply {

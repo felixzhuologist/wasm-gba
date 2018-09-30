@@ -1,10 +1,11 @@
-pub mod arm_isa;
+pub mod arm;
+pub mod thumb;
 pub mod status_reg;
 
 use num::FromPrimitive;
 use mem;
 use util;
-use self::arm_isa::{
+use self::arm::{
     block_trans,
     branch,
     branch_ex,
@@ -18,7 +19,7 @@ use self::arm_isa::{
     swi,
     Instruction,
     RegOrImm};
-use self::arm_isa::Instruction::{
+use self::arm::Instruction::{
     DataProc,
     PSRTransfer,
     Multiply,
@@ -32,7 +33,7 @@ use self::arm_isa::Instruction::{
     SWInterrupt,
     Noop
 };
-use self::arm_isa::data::apply_shift;
+use self::arm::data::apply_shift;
 use self::status_reg::{CPUMode, PSR, ProcessorMode};
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
@@ -138,7 +139,8 @@ impl CPUWrapper {
 
 pub struct CPU {
     /// r0-r12 are general purpose registers,
-    /// r13 is usually the stack pointer, r14 is usually the link register,
+    /// r13 is usually the stack pointer (to the top element of the stack, not
+    /// the top element + 1), r14 is usually the link register,
     /// and r15 is the PC pointing to address + 8 of the current instruction
     r: [u32; 16],
     /// R8-R14 are banked in FIQ mode
@@ -237,6 +239,10 @@ impl CPU {
         // pre transfer
         let mut addr = self.get_reg(params.base_reg);
         let offset = self.get_offset(&params.offset);
+        // word align the PC in THUMB mode if using as offset
+        if self.cpsr.t == CPUMode::THUMB && params.base_reg == 15 {
+            addr &= !2;
+        }
         if params.pre_index {
             addr = if params.offset_up { addr + offset } else { addr - offset };
         }
@@ -477,7 +483,7 @@ mod test {
 
     mod get_instruction_handler {
         use ::cpu::*;
-        use ::cpu::arm_isa::Instruction;
+        use ::cpu::arm::Instruction;
 
         macro_rules! has_type {
             ($instr:expr, $instr_type: pat) => (

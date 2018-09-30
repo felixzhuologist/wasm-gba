@@ -8,23 +8,23 @@ use ::util;
 /// if auto-indexing is required
 pub struct SignedDataTransfer {
     /// if true, add offset before transfer else add after
-    pre_index: bool,
+    pub pre_index: bool,
     /// if true, add the offset to base, else subtract it
-    offset_up: bool,
+    pub offset_up: bool,
     /// if true, transfer halfword, else byte
-    halfword: bool,
+    pub halfword: bool,
     /// if true, write address back to base reg, else do nothing
-    write_back: bool,
+    pub write_back: bool,
     /// if true, load from memory, else write to memory
-    load: bool,
+    pub load: bool,
     /// base register
-    rn: usize,
+    pub rn: usize,
     /// source/destination register
-    rd: usize,
+    pub rd: usize,
     /// if true, treat as signed, otherwise as unsigned
-    signed: bool,
+    pub signed: bool,
     /// offset register
-    offset: RegOrImm
+    pub offset: RegOrImm
 }
 
 impl SignedDataTransfer {
