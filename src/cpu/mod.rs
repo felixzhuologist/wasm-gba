@@ -65,6 +65,20 @@ impl CPUWrapper {
         }
     }
 
+    /// Run a single instruction
+    pub fn step(&mut self) {
+        self.fetch();
+        self.decode();
+        self.execute();
+
+        if self.cpu.should_flush {
+            self.flush_pipeline();
+        } else {
+            self.idx = (self.idx + 1) % 3;
+            self.cpu.incr_pc();
+        }
+    }
+
     fn satisfies_cond(&self, cond: u32) -> bool {
         let cpsr = &self.cpu.cpsr;
         match CondField::from_u32(cond).unwrap() {
@@ -87,9 +101,12 @@ impl CPUWrapper {
     }
 
     pub fn fetch(&mut self) {
-        // self.pipeline[idx] = ...
-        // self.idx = (self.idx + 1) % 3;
-        unimplemented!()
+        let pc = self.cpu.get_reg(15);
+        self.pipeline[self.idx] = if self.cpu.cpsr.t == CPUMode::THUMB {
+            PipelineInstruction::RawTHUMB(self.cpu.mem.get_halfword(pc))
+        } else {
+            PipelineInstruction::RawARM(self.cpu.mem.get_word(pc))
+        }
     }
 
     /// decode the next instruction. if the condition of the instruction isn't met,
@@ -97,14 +114,21 @@ impl CPUWrapper {
     pub fn decode(&mut self) {
         // index of the second element from the end
         let idx = ((self.idx as i8 - 2 as i8) % 3) as usize;
-        if let PipelineInstruction::Raw(n) = self.pipeline[idx] {
-            let cond = util::get_nibble(n, 28);
-            self.pipeline[idx] = PipelineInstruction::Decoded(
-                if self.satisfies_cond(cond) {
-                    get_instruction_handler(n).unwrap()
-                } else {
-                    Noop
-                })
+        match self.pipeline[idx] {
+            PipelineInstruction::RawARM(n) => {
+                let cond = util::get_nibble(n, 28);
+                self.pipeline[idx] = PipelineInstruction::Decoded(
+                    if self.satisfies_cond(cond) {
+                        decode_arm(n).unwrap()
+                    } else {
+                        Noop
+                    })
+            },
+            PipelineInstruction::RawTHUMB(n) => {
+                self.pipeline[idx] =
+                    PipelineInstruction::Decoded(decode_thumb(n))
+            },
+            _ => ()
         }
     }
 
@@ -190,6 +214,11 @@ impl CPU {
 
             mem: mem::Memory::new(),
         }
+    }
+
+    pub fn incr_pc(&mut self) {
+        let offset = if self.cpsr.t == CPUMode::THUMB { 2 } else { 4 };
+        self.r[15] += offset;
     }
 
     pub fn get_reg(&self, reg: usize) -> u32 {
@@ -333,9 +362,10 @@ pub enum PipelineInstruction {
     /// pipeline has just been flushed and the CPU is stalling waiting for the
     /// next instruction to be fetched
     Empty,
-    /// A fetched instruction. This could either be a 32bit ARM instruction or
-    /// a 16 bit THUMB instruction
-    Raw(u32),
+    /// A fetched ARM instruction
+    RawARM(u32),
+    /// A fetched THUMB instruction
+    RawTHUMB(u16),
     /// A decoded instruction
     Decoded(Instruction)
 }
@@ -361,7 +391,7 @@ pub enum CondField {
 }
 }
 
-pub fn get_instruction_handler(ins: u32) -> Option<Instruction> {
+pub fn decode_arm(ins: u32) -> Option<Instruction> {
     let op0 = util::get_nibble(ins, 24);
     let op1 = util::get_nibble(ins, 20);
     let op2 = util::get_nibble(ins, 4);
@@ -394,6 +424,59 @@ pub fn get_instruction_handler(ins: u32) -> Option<Instruction> {
         Some(SWInterrupt(swi::SWInterrupt::parse_instruction(ins)))
     } else {
         None
+    }
+}
+
+pub fn decode_thumb(ins: u16) -> Instruction {
+    // this intermediate function exists to be able to test that the correct
+    // THUMB format is identified
+    _decode_thumb(ins)(ins)
+}
+
+// NOTE: this doesn't check for invalid instructions - it only looks at the minimum
+// number of bits necessary to decide between valid THUMB formats
+fn _decode_thumb(ins: u16) -> (fn(u16) -> Instruction) {
+    // use binary on left to make it easier to compare to the reference doc
+    match (ins >> 12) & 0xF {
+        0b0000 => thumb::move_,
+        0b0001 =>
+            if util::get_bit_hw(ins, 11)
+                { thumb::add_sub } else
+                { thumb::move_ },
+        0b0010 |
+        0b0011 => thumb::data_imm,
+        0b0100 => {
+            let comp = (ins >> 10) & 0b11;
+            match comp {
+                0 => thumb::alu_op,
+                1 => thumb::hi_reg_bex,
+                _ => thumb::pc_rel_load,
+            }
+        },
+        0b0101 => {
+            if util::get_bit_hw(ins, 9)
+                { thumb::signed_trans } else
+                { thumb::reg_offset_trans }
+        },
+        0b0110 |
+        0b0111 => thumb::imm_offset_trans,
+        0b1000 => thumb::hw_trans,
+        0b1001 => thumb::sp_rel_trans,
+        0b1010 => thumb::load_addr,
+        0b1011 => {
+            if util::get_bit_hw(ins, 10)
+                { thumb::push_pop } else
+                { thumb::incr_sp }
+        },
+        0b1100 => thumb::block_trans,
+        0b1101 => {
+            if (ins >> 8) & 0xF == 0xF
+                { thumb::swi } else
+                { thumb::cond_branch }
+        },
+        0b1110 => thumb::branch,
+        0b1111 => thumb::long_branch,
+        _ => panic!("should not get here")
     }
 }
 
@@ -481,13 +564,13 @@ mod test {
         }
     }
 
-    mod get_instruction_handler {
+    mod decode_arm {
         use ::cpu::*;
         use ::cpu::arm::Instruction;
 
         macro_rules! has_type {
             ($instr:expr, $instr_type: pat) => (
-                assert!(match get_instruction_handler($instr).unwrap() {
+                assert!(match decode_arm($instr).unwrap() {
                     $instr_type => true,
                     _ => false
                 })
@@ -562,6 +645,43 @@ mod test {
             has_type!(0xF_1_0BE0_B_3, Instruction::SignedTransfer(_));
             has_type!(0xF_0_FABC_D_3, Instruction::SignedTransfer(_));
             has_type!(0xF_0_7123_F_3, Instruction::SignedTransfer(_));
+        }
+    }
+
+    mod decode_thumb {
+        use ::cpu::*;
+        use ::cpu::arm::Instruction;
+        use ::cpu::thumb::*;
+
+        macro_rules! has_format {
+            ($instr:expr, $thumb_format: ident) => (
+                assert!(_decode_thumb($instr) == $thumb_format))
+        }
+
+        #[test]
+        fn sanity() {
+            has_format!(0x0123, move_);
+            has_format!(0x1012, move_);
+            has_format!(0x1F12, add_sub);
+            has_format!(0x2000, data_imm);
+            has_format!(0x3FFF, data_imm);
+            has_format!(0x4A00, pc_rel_load);
+            has_format!(0x42FA, alu_op);
+            has_format!(0x451A, hi_reg_bex);
+            has_format!(0x51AB, reg_offset_trans);
+            has_format!(0x5700, signed_trans);
+            has_format!(0x6123, imm_offset_trans);
+            has_format!(0x700F, imm_offset_trans);
+            has_format!(0x8FFF, hw_trans);
+            has_format!(0x9001, sp_rel_trans);
+            has_format!(0xAAAB, load_addr);
+            has_format!(0xB00A, incr_sp);
+            has_format!(0xBD00, push_pop);
+            has_format!(0xCEEA, block_trans);
+            has_format!(0xDE01, cond_branch);
+            has_format!(0xDF01, swi);
+            has_format!(0xE590, branch);
+            has_format!(0xF3C7, long_branch);
         }
     }
 }

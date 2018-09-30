@@ -365,7 +365,10 @@ pub fn block_trans(raw: u16) -> Instruction {
 /// format 16:
 /// 15 | 14 | 13 | 12 | 11 .. 8 | 7 .. 0
 /// 1  | 1  | 0  | 1  |  cond   | soffset8
-// TODO: should be handled as a special case
+pub fn cond_branch(raw: u16) -> Instruction {
+    // TODO: add new THUMB specific instruction
+    unimplemented!()
+}
 
 /// format 17: SWI
 /// 15 .. 8  | 7 .. 0
@@ -392,7 +395,10 @@ pub fn branch(raw: u16) -> Instruction {
 /// format 19:
 /// 15 .. 12 | 11 | 10 .. 0
 ///   1111   | H  | offset
-// TODO: should be handled as a special case
+pub fn long_branch(raw: u16) -> Instruction {
+    // TODO: add new THUMB specific instruction
+    unimplemented!()
+}
 
 #[cfg(test)]
 mod test {
