@@ -10,6 +10,7 @@
 //! 5: 160x128 15 bit bitmap with page flip
 
 use super::addrs::*;
+use super::super::addrs::IO_START;
 use core::cmp::min;
 
 /// Contains all graphics related information from the LCD display I/O registers.
@@ -150,7 +151,7 @@ impl GraphicsIO {
                 }
             },
             BG_AFFINE_START...BG_AFFINE_END => {
-                let addr = addr as usize;
+                let addr = (addr - IO_START) as usize;
                 let bg = (addr - BG_AFFINE_START as usize) / 10;
                 let hw_raw =
                     (raw[addr - (addr % 2)] as u16) |

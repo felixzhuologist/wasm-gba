@@ -2,6 +2,7 @@ mod addrs;
 pub mod io;
 
 use util;
+use mem::io::addrs::*;
 use self::addrs::*;
 
 pub struct Memory {
@@ -34,6 +35,7 @@ pub struct Memory {
     // these are parsed versions of raw data stored in memory that must be updated
     // on write so that the values are in sync with the actual raw data
     graphics: io::graphics::GraphicsIO,
+    dma: io::dma::DMA,
 }
 
 impl Memory {
@@ -50,6 +52,7 @@ impl Memory {
             // cart: Vec::new(),
 
             graphics: io::graphics::GraphicsIO::new(),
+            dma: io::dma::DMA::new(),
         }
     }
 
@@ -118,8 +121,17 @@ impl Memory {
             let (segment, idx) = self.get_loc_mut(addr);
             segment[idx] = val;
         }
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_byte(addr, val, &self.io);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END => {
+                let offset = (GRAPHICS_START - IO_START) as usize;
+                self.graphics.set_byte(addr, val, &self.io[offset..]);    
+            },
+            DMA_START...DMA_END => {
+                let offset = (DMA_START - IO_START) as usize;
+                self.dma.set_byte(addr, val, &self.io[offset..]);
+            },
+            _ => ()
         }
     }
 
@@ -129,8 +141,17 @@ impl Memory {
             segment[idx] = util::get_byte(val, 0) as u8;
             segment[idx + 1] = util::get_byte(val, 8) as u8;
         }
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_halfword(addr, val, &self.io);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END => {
+                let offset = (GRAPHICS_START - IO_START) as usize;
+                self.graphics.set_halfword(addr, val, &self.io[offset..]);    
+            },
+            DMA_START...DMA_END => {
+                let offset = (DMA_START - IO_START) as usize;
+                self.dma.set_halfword(addr, val, &self.io[offset..]);
+            },
+            _ => ()
         }
     }
 
@@ -142,8 +163,17 @@ impl Memory {
             segment[idx + 2] = util::get_byte(val, 16) as u8;
             segment[idx + 3] = util::get_byte(val, 24) as u8;
         }
-        if addr >= 0x04000000 && addr <= 0x040003FF {
-            self.graphics.set_word(addr, val, &self.io[..0x60]);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END => {
+                let offset = (GRAPHICS_START - IO_START) as usize;
+                self.graphics.set_word(addr, val, &self.io[offset..]);    
+            },
+            DMA_START...DMA_END => {
+                let offset = (DMA_START - IO_START) as usize;
+                self.dma.set_word(addr, val, &self.io[offset..]);
+            },
+            _ => ()
         }
     }
 }

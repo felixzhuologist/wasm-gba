@@ -1,3 +1,5 @@
+// graphics
+pub const GRAPHICS_START: u32 = 0x4000000;
 pub const DISPCNT_LO: u32 = 0x04000000;
 pub const DISPCNT_HI: u32 = 0x04000001;
 pub const DISPSTAT_LO: u32 = 0x04000004;
@@ -19,3 +21,8 @@ pub const BLDCNT_HI: u32 = 0x4000051;
 pub const BLDALPHA_LO: u32 = 0x4000052;
 pub const BLDALPHA_HI: u32 = 0x4000053;
 pub const BLDY: u32 = 0x4000054;
+pub const GRAPHICS_END: u32 = 0x4000055;
+
+// DMA
+pub const DMA_START: u32 = 0x40000B0;
+pub const DMA_END: u32 = 0x40000DF;
