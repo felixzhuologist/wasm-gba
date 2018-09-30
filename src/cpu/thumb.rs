@@ -1,5 +1,5 @@
 use num::FromPrimitive;
-use ::cpu::arm::{Instruction, RegOrImm};
+use ::cpu::arm::RegOrImm;
 use ::cpu::arm::data::{DataProc, Op};
 use ::cpu::arm::branch::Branch;
 use ::cpu::arm::branch_ex::BranchAndExchange;
@@ -8,6 +8,7 @@ use ::cpu::arm::single_trans::SingleDataTransfer;
 use ::cpu::arm::signed_trans::SignedDataTransfer;
 use ::cpu::arm::block_trans::BlockDataTransfer;
 use ::cpu::arm::swi::SWInterrupt;
+use ::cpu::pipeline::Instruction;
 use ::util;
 
 /// format 1:

@@ -10,9 +10,8 @@ use ::cpu::arm::{
     single_trans,
     swap,
     swi,
-    Instruction,
 };
-use ::cpu::arm::Instruction::{
+use self::Instruction::{
     DataProc,
     PSRTransfer,
     Multiply,
@@ -131,13 +130,26 @@ fn _decode_thumb(ins: u16) -> (fn(u16) -> Instruction) {
     }
 }
 
+pub enum Instruction {
+    DataProc(data::DataProc),
+    PSRTransfer(psr::PSRTransfer),
+    Multiply(mul::Multiply),
+    MultiplyLong(mul_long::MultiplyLong),
+    SwapTransfer(swap::SingleDataSwap),
+    SingleTransfer(single_trans::SingleDataTransfer),
+    SignedTransfer(signed_trans::SignedDataTransfer),
+    BlockTransfer(block_trans::BlockDataTransfer),
+    Branch(branch::Branch),
+    BranchEx(branch_ex::BranchAndExchange),
+    SWInterrupt(swi::SWInterrupt),
+    Noop
+}
 
 #[cfg(test)]
 mod test {
 
     mod decode_arm {
         use super::super::*;
-        use ::cpu::arm::Instruction;
 
         macro_rules! has_type {
             ($instr:expr, $instr_type: pat) => (
@@ -221,7 +233,6 @@ mod test {
 
     mod decode_thumb {
         use super::super::*;
-        use ::cpu::arm::Instruction;
         use ::cpu::thumb::*;
 
         macro_rules! has_format {

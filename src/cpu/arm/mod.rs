@@ -10,21 +10,6 @@ pub mod block_trans;
 pub mod swap;
 pub mod swi;
 
-pub enum Instruction {
-    DataProc(data::DataProc),
-    PSRTransfer(psr::PSRTransfer),
-    Multiply(mul::Multiply),
-    MultiplyLong(mul_long::MultiplyLong),
-    SwapTransfer(swap::SingleDataSwap),
-    SingleTransfer(single_trans::SingleDataTransfer),
-    SignedTransfer(signed_trans::SignedDataTransfer),
-    BlockTransfer(block_trans::BlockDataTransfer),
-    Branch(branch::Branch),
-    BranchEx(branch_ex::BranchAndExchange),
-    SWInterrupt(swi::SWInterrupt),
-    Noop
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum RegOrImm {
     Imm { rotate: u32, value: u32 },

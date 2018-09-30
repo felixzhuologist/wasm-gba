@@ -5,7 +5,9 @@ pub mod status_reg;
 
 use self::arm::RegOrImm;
 use self::arm::data::apply_shift;
-use self::arm::Instruction::{
+use self::status_reg::{CPUMode, PSR, ProcessorMode};
+use self::pipeline::{decode_arm, decode_thumb, PipelineInstruction};
+use self::pipeline::Instruction::{
     DataProc,
     PSRTransfer,
     Multiply,
@@ -19,8 +21,6 @@ use self::arm::Instruction::{
     SWInterrupt,
     Noop
 };
-use self::status_reg::{CPUMode, PSR, ProcessorMode};
-use self::pipeline::{decode_arm, decode_thumb, PipelineInstruction};
 use mem;
 use util;
 use num::FromPrimitive;
