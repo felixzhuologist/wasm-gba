@@ -414,19 +414,37 @@ pub fn branch(raw: u16) -> Instruction {
     })
 }
 
-/// format 19:
+/// format 19: allows for a branch and link with a full 23 bit offset
+/// a long branch with H = 1 followed by one with H = 0 is equivalent to one BL
 /// 15 .. 12 | 11 | 10 .. 0
 ///   1111   | H  | offset
 pub fn long_branch(raw: u16) -> Instruction {
-    // TODO: add new THUMB specific instruction
-    unimplemented!()
+    Instruction::LongBranch(LongBranch {
+        first: util::get_bit_hw(raw, 11),
+        offset: raw & 0x7FF
+    })
 }
 
+// long_branch is implemented as one instruction to keep the Instruction enum
+// minimal
 pub struct LongBranch { pub first: bool, offset: u16 }
 
 impl LongBranch {
     pub fn run(&self, cpu: &mut CPU) {
-        unimplemented!()
+        if self.first {
+            let mut offset = (self.offset as u32) << 12;
+            if util::get_bit(offset, 22) {
+                offset |= 0xFF800000;
+            }
+            let upper = cpu.get_reg(15) as i64 + (offset as i32) as i64;
+            cpu.set_reg(14, upper as u32);
+        } else {
+            let next_ins = (cpu.get_reg(15) - 2) | 1;
+            let pc = cpu.get_reg(14) + ((self.offset as u32) << 1);
+            cpu.set_reg(14, next_ins);
+            cpu.set_reg(15, pc & !1);
+            cpu.should_flush = true;
+        }
     }
 }
 

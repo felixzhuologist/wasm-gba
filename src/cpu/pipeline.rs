@@ -145,6 +145,7 @@ pub enum Instruction {
     BranchEx(branch_ex::BranchAndExchange),
     SWInterrupt(swi::SWInterrupt),
     CondBranch(thumb::CondBranch),
+    LongBranch(thumb::LongBranch),
     Noop
 }
 

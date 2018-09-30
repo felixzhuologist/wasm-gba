@@ -108,6 +108,7 @@ impl CPUWrapper {
                 Instruction::BranchEx(ins) => ins.run(&mut self.cpu),
                 Instruction::SWInterrupt(ins) => ins.run(&mut self.cpu),
                 Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
+                Instruction::LongBranch(ins) => ins.run(&mut self.cpu),
                 Instruction::Noop => (),
             }
         }
