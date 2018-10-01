@@ -147,7 +147,9 @@ impl Memory {
             self.raw.set_word(DMA_CNT[channel_num], old_reg & !0x8000);
         }
 
-        // TODO: raise IRQ if it's on
+        if channel.irq {
+            self.int.triggered.dma[channel_num] = true;
+        }
     }
 }
 

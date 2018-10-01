@@ -25,9 +25,9 @@ use super::addrs::*;
 use mem::Memory;
 
 pub struct Interrupt {
-    master_enabled: bool,
-    enabled: InterruptBitmap,
-    triggered: InterruptBitmap,
+    pub master_enabled: bool,
+    pub enabled: InterruptBitmap,
+    pub triggered: InterruptBitmap,
 }
 
 impl Interrupt {
@@ -37,6 +37,20 @@ impl Interrupt {
             enabled: InterruptBitmap::new(),
             triggered: InterruptBitmap::new(),
         }
+    }
+
+    /// Return true if there is any pending interrupt
+    pub fn pending_interrupts(&self) -> bool {
+        if !self.master_enabled {
+            return false;
+        }
+
+        self.enabled.as_array().iter()
+            .zip(self.triggered.as_array().iter())
+            .filter(|(enabled, triggered)| **enabled && **triggered)
+            .peekable()
+            .peek()
+            .is_some()
     }
 }
 
@@ -100,14 +114,14 @@ impl Memory {
 }
 
 pub struct InterruptBitmap {
-    vblank: bool,
-    hblank: bool,
-    vcount: bool,
-    timer: [bool; 4],
-    serial: bool,
-    dma: [bool; 4],
-    keypad: bool,
-    gamepak: bool,
+    pub vblank: bool,
+    pub hblank: bool,
+    pub vcount: bool,
+    pub timer: [bool; 4],
+    pub serial: bool,
+    pub dma: [bool; 4],
+    pub keypad: bool,
+    pub gamepak: bool,
 }
 
 impl InterruptBitmap {
@@ -122,6 +136,25 @@ impl InterruptBitmap {
             keypad: false,
             gamepak: false,      
         }
+    }
+
+    pub fn as_array(&self) -> [bool; 14] {
+        [
+            self.vblank,
+            self.hblank,
+            self.vcount,
+            self.timer[0],
+            self.timer[1],
+            self.timer[2],
+            self.timer[3],
+            self.serial,
+            self.dma[0],
+            self.dma[1],
+            self.dma[2],
+            self.dma[3],
+            self.keypad,
+            self.gamepak,
+        ]
     }
 }
 

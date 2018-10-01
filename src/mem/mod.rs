@@ -11,7 +11,7 @@ pub struct Memory {
     // on write so that the values are in sync with the actual raw data
     graphics: io::graphics::LCD,
     dma: io::dma::DMA,
-    int: io::interrupt::Interrupt
+    pub int: io::interrupt::Interrupt
 }
 
 impl Memory {

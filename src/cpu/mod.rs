@@ -58,6 +58,9 @@ impl CPUWrapper {
             self.idx = (self.idx + 1) % 3;
             self.cpu.incr_pc();
         }
+
+        self.cpu.mem.check_dma();
+        self.cpu.check_interrupts();
     }
 
     pub fn fetch(&mut self) {
@@ -349,6 +352,11 @@ impl CPU {
         self.cpsr.isa = if thumb { InstructionSet::THUMB } else { InstructionSet::ARM };
     }
 
+    pub fn check_interrupts(&mut self) {
+        if self.cpsr.irq && self.mem.int.pending_interrupts() {
+            self.handle_interrupt(InterruptType::IRQ);
+        }
+    }
 
     /// Emulate a hardware interrupt being triggered
     ///   - CPU is switched to IRQ mode
@@ -361,7 +369,7 @@ impl CPU {
     ///   - r0-r3, r12, LR are pushed onto the stack
     ///   - place address for the next instruction (in the BIOS) in LR
     ///   - branches to the address at 0x0300_7FFC
-    pub fn handle_interrupt(&mut self, type_: InterruptType) {
+    fn handle_interrupt(&mut self, type_: InterruptType) {
         self.change_mode(type_.get_cpu_mode());
         if let InterruptType::IRQ = type_ {
             self.cpsr.irq = false;
