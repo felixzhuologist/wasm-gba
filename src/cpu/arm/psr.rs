@@ -1,6 +1,5 @@
 use super::RegOrImm;
 use ::cpu::CPU;
-use ::cpu::status_reg::{InstructionSet, CPUMode};
 use ::util;
 
 pub enum StateRegType {
@@ -94,6 +93,7 @@ impl PSRTransfer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ::cpu::status_reg::{InstructionSet, CPUMode};
 
     #[test]
     fn parse_read() {

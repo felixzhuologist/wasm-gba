@@ -53,6 +53,7 @@ impl CPUWrapper {
 
         if self.cpu.should_flush {
             self.flush_pipeline();
+            self.cpu.should_flush = false;
         } else {
             self.idx = (self.idx + 1) % 3;
             self.cpu.incr_pc();
@@ -178,8 +179,7 @@ impl CPU {
     }
 
     pub fn incr_pc(&mut self) {
-        let offset = if self.cpsr.isa == InstructionSet::THUMB { 2 } else { 4 };
-        self.r[15] += offset;
+        self.r[15] += self.instruction_size();
     }
 
     /// Add a signed offset to the PC
@@ -289,28 +289,93 @@ impl CPU {
         } 
     }
 
-    /// restore CPSR to the SPSR for the current mode
-    fn restore_cpsr(&mut self) {
-        unimplemented!()
+    /// Return size of the current instruction set in bytes
+    pub fn instruction_size(&self) -> u32 {
+        if self.cpsr.isa == InstructionSet::THUMB { 2 } else { 4 }
     }
 
+    /// restore CPSR to the SPSR for the current mode
+    fn restore_cpsr(&mut self) {
+        self.cpsr = self.get_spsr();
+    }
+
+    /// Set the CPSR
     fn set_cpsr(&mut self, val: u32) {
         self.cpsr.from_u32(val);
     }
 
+    /// Return the SPSR for the current mode
     fn get_spsr(&self) -> PSR {
-        unimplemented!()
+        match self.cpsr.mode {
+            // TODO: just return CPSR for USR mode?
+            CPUMode::USR => panic!("USR mode has no SPSR"),
+            CPUMode::FIQ => self.spsr_fiq,
+            CPUMode::IRQ => self.spsr_irq,
+            CPUMode::SVC => self.spsr_svc,
+            CPUMode::ABT => self.spsr_abt,
+            CPUMode::UND => self.spsr_und,
+            CPUMode::SYS => self.cpsr
+        }
     }
 
     /// Set the SPSR for the current mode
     fn set_spsr(&mut self, val: u32) {
-        unimplemented!()
+        match self.cpsr.mode {
+            CPUMode::USR => panic!("USR mode has no SPSR"),
+            CPUMode::FIQ => self.spsr_fiq.from_u32(val),
+            CPUMode::IRQ => self.spsr_irq.from_u32(val),
+            CPUMode::SVC => self.spsr_svc.from_u32(val),
+            CPUMode::ABT => self.spsr_abt.from_u32(val),
+            CPUMode::UND => self.spsr_und.from_u32(val),
+            CPUMode::SYS => ()
+        }
+    }
+
+    /// Change CPU modes, saving or restoring the CPSR in the process
+    fn change_mode(&mut self, new_mode: CPUMode) {
+        match new_mode {
+            CPUMode::USR => self.restore_cpsr(),
+            CPUMode::FIQ => self.spsr_fiq = self.cpsr,
+            CPUMode::IRQ => self.spsr_irq = self.cpsr,
+            CPUMode::SVC => self.spsr_svc = self.cpsr,
+            CPUMode::ABT => self.spsr_abt = self.cpsr,
+            CPUMode::UND => self.spsr_und = self.cpsr,
+            CPUMode::SYS => unimplemented!()
+        };
+        self.cpsr.mode = new_mode;
     }
 
     fn set_isa(&mut self, thumb: bool) {
         self.cpsr.isa = if thumb { InstructionSet::THUMB } else { InstructionSet::ARM };
     }
 
+
+    /// Emulate a hardware interrupt being triggered
+    ///   - CPU is switched to IRQ mode
+    ///   - saves the CPSR in SPSR_irq and sets bit 7 (disable IRQ) in the CPSR
+    ///   - saves the address of the next instruction in LR_irq, compensating for
+    ///     THUMB/ARM instruction size
+    ///   - branches to the appropriate hardware interrupt vector entry in the BIOS
+    /// The following is done by the BIOS, so should be emulated here if the
+    /// real BIOS is not loaded
+    ///   - r0-r3, r12, LR are pushed onto the stack
+    ///   - place address for the next instruction (in the BIOS) in LR
+    ///   - branches to the address at 0x0300_7FFC
+    pub fn handle_interrupt(&mut self, type_: InterruptType) {
+        self.change_mode(type_.get_cpu_mode());
+        if let InterruptType::IRQ = type_ {
+            self.cpsr.irq = false;
+        }
+
+        let next_ins_addr = self.get_reg(15) - self.instruction_size();
+        // TODO: is this correct? GBE does it differently
+        self.set_reg(14, next_ins_addr);
+
+        self.cpsr.isa = InstructionSet::ARM;
+        self.set_reg(15, type_.get_handler_addr());
+    }
+
+    // TODO: this should probably be a function
     fn get_offset(&self, offset: &RegOrImm) -> u32 {
         match *offset {
             RegOrImm::Imm { rotate: _, value: n } => n,
@@ -340,6 +405,36 @@ pub enum TransferSize {
     Byte,
     Halfword,
     Word,
+}
+
+pub enum InterruptType {
+    Reset,
+    Undefined,
+    SWI,
+    PrefetchAbort,
+    DataAbort,
+    IRQ,
+    FIQ,
+}
+
+impl InterruptType {
+    /// The address that the CPU jumps to for this specific interrupt type
+    pub fn get_handler_addr(&self) -> u32 {
+        match *self {
+            InterruptType::SWI => 0x8,
+            InterruptType::IRQ => 0x18,
+            _ => unimplemented!()
+        }
+    }
+
+    /// The mode that the CPU enters for this specific interrupt type
+    pub fn get_cpu_mode(&self) -> CPUMode {
+        match *self {
+            InterruptType::SWI => CPUMode::SVC,
+            InterruptType::IRQ => CPUMode::IRQ,
+            _ => unimplemented!()
+        }
+    }
 }
 
 #[cfg(test)]

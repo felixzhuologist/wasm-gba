@@ -166,7 +166,7 @@ impl Memory {
                     4...5 => graphics.bg_affine[bg].dy = to_float_hw(hw_raw),
                     6...7 => graphics.bg_affine[bg].dmy = to_float_hw(hw_raw),
                     8...12 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
-                    13...15 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    13...15 => graphics.bg_affine[bg].ref_y = to_float_word(word_raw),
                     _ => panic!("should not get here")
                 }
             },

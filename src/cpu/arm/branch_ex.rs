@@ -1,5 +1,4 @@
 use ::cpu::CPU;
-use ::cpu::status_reg::InstructionSet;
 use ::util;
 
 /// This instruction performs a branch by copying the contents of a single register
@@ -30,6 +29,7 @@ impl BranchAndExchange {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ::cpu::status_reg::InstructionSet;
 
     #[test]
     fn parse() {

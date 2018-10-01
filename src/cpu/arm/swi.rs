@@ -1,4 +1,4 @@
-use ::cpu::CPU;
+use ::cpu::{CPU, InterruptType};
 
 /// Cause a software interrupt trap to be taken, which switches to Supervisor mode,
 /// changes the PC to a fixed value (0x08), and saves the CPSR
@@ -10,6 +10,6 @@ impl SWInterrupt {
     }
 
     pub fn run(&self, cpu: &mut CPU) {
-        unimplemented!()
+        cpu.handle_interrupt(InterruptType::SWI);
     }
 }

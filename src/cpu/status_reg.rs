@@ -52,6 +52,7 @@ pub enum InstructionSet {
 /// in this implementation we unpack the 32 bits to avoid having to do bit
 /// manipulation each time we want to get a specific flag, at the expense of
 /// more space
+#[derive(Copy, Clone)]
 pub struct PSR {
     pub neg: bool,
     pub zero: bool,
