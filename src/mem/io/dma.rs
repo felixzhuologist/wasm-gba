@@ -11,7 +11,7 @@
 
 use num::FromPrimitive;
 use super::addrs::*;
-use super::super::Memory;
+use mem::Memory;
 use util;
 
 pub struct DMA {

@@ -16,3 +16,4 @@
 pub mod addrs;
 pub mod graphics;
 pub mod dma;
+pub mod interrupt;

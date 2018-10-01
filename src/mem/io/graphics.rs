@@ -10,14 +10,14 @@
 //! 5: 160x128 15 bit bitmap with page flip
 
 use super::addrs::*;
-use super::super::Memory;
+use mem::Memory;
 use core::cmp::min;
 
 /// Contains all graphics related information from the LCD display I/O registers.
 /// The data in this struct is a mirror of the data from addresses
 /// 0x4000000 - 0x4000060, and is updated using set_byte() each time that segment
 /// of memory is updated.
-pub struct GraphicsIO {
+pub struct LCD {
     disp_cnt: DispCnt,
     pub disp_stat: DispStat,
     /// Stores the current Y location of the current line being drawn
@@ -42,9 +42,9 @@ pub struct GraphicsIO {
     brightness_coef: f32,
 }
 
-impl GraphicsIO {
-    pub const fn new() -> GraphicsIO {
-        GraphicsIO {
+impl LCD {
+    pub const fn new() -> LCD {
+        LCD {
             disp_cnt: DispCnt::new(),
             disp_stat: DispStat::new(),
             vcount: 0,

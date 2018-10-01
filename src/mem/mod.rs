@@ -9,16 +9,18 @@ pub struct Memory {
     raw: RawMemory,
     // these are parsed versions of raw data stored in memory that must be updated
     // on write so that the values are in sync with the actual raw data
-    graphics: io::graphics::GraphicsIO,
+    graphics: io::graphics::LCD,
     dma: io::dma::DMA,
+    int: io::interrupt::Interrupt
 }
 
 impl Memory {
     pub const fn new() -> Memory {
         Memory {
             raw: RawMemory::new(),
-            graphics: io::graphics::GraphicsIO::new(),
+            graphics: io::graphics::LCD::new(),
             dma: io::dma::DMA::new(),
+            int: io::interrupt::Interrupt::new(),
         }
     }
 
@@ -42,6 +44,8 @@ impl Memory {
                 self.update_graphics_byte(addr, val),
             DMA_START...DMA_END =>
                 self.update_dma_byte(addr, val),
+            INT_START...INT_END =>
+                self.update_int_byte(addr, val),
             _ => ()
         }
     }
@@ -54,6 +58,8 @@ impl Memory {
                 self.update_graphics_hw(addr, val),
             DMA_START...DMA_END =>
                 self.update_dma_hw(addr, val),
+            INT_START...INT_END =>
+                self.update_int_hw(addr, val),
             _ => ()
         }
     }
@@ -66,6 +72,8 @@ impl Memory {
                 self.update_graphics_word(addr, val),
             DMA_START...DMA_END =>
                 self.update_dma_word(addr, val),
+            INT_START...INT_END =>
+                self.update_int_word(addr, val),
             _ => ()
         }
     }
