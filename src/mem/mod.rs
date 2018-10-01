@@ -123,14 +123,10 @@ impl Memory {
         }
 
         match addr {
-            GRAPHICS_START...GRAPHICS_END => {
-                let offset = (GRAPHICS_START - IO_START) as usize;
-                self.graphics.set_byte(addr, val, &self.io[offset..]);    
-            },
-            DMA_START...DMA_END => {
-                let offset = (DMA_START - IO_START) as usize;
-                self.dma.set_byte(addr, val, &self.io[offset..]);
-            },
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_byte(addr, val),
+            // DMA_START...DMA_END =>
+                // self.dma.set_byte(addr, val),
             _ => ()
         }
     }
@@ -143,14 +139,10 @@ impl Memory {
         }
 
         match addr {
-            GRAPHICS_START...GRAPHICS_END => {
-                let offset = (GRAPHICS_START - IO_START) as usize;
-                self.graphics.set_halfword(addr, val, &self.io[offset..]);    
-            },
-            DMA_START...DMA_END => {
-                let offset = (DMA_START - IO_START) as usize;
-                self.dma.set_halfword(addr, val, &self.io[offset..]);
-            },
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_hw(addr, val),
+            // DMA_START...DMA_END =>
+                // self.dma.set_halfword(addr, val),
             _ => ()
         }
     }
@@ -165,14 +157,10 @@ impl Memory {
         }
 
         match addr {
-            GRAPHICS_START...GRAPHICS_END => {
-                let offset = (GRAPHICS_START - IO_START) as usize;
-                self.graphics.set_word(addr, val, &self.io[offset..]);    
-            },
-            DMA_START...DMA_END => {
-                let offset = (DMA_START - IO_START) as usize;
-                self.dma.set_word(addr, val, &self.io[offset..]);
-            },
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_word(addr, val),
+            // DMA_START...DMA_END =>
+                // self.dma.set_word(addr, val),
             _ => ()
         }
     }
