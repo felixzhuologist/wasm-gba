@@ -19,7 +19,7 @@ use core::cmp::min;
 /// of memory is updated.
 pub struct GraphicsIO {
     disp_cnt: DispCnt,
-    disp_stat: DispStat,
+    pub disp_stat: DispStat,
     /// Stores the current Y location of the current line being drawn
     vcount: u8,
     bg_cnt: [BgCnt; 4],
@@ -304,20 +304,15 @@ impl DispCnt {
 /// Address: 0x4000004 - REG_DISPSTAT
 ///                              R R R
 /// F E D C  B A 9 8  7 6 5 4  3 2 1 0 
-/// T T T T  T T T T  X X Y H  V Z G W 
-struct DispStat {
+/// T T T T  T T T T  X X Y H  V Z G W
+/// NOTE the read only bits are only kept updated in this struct, not in raw memory
+pub struct DispStat {
     /// 0   (W) = V Refresh status. This will be 0 during VDraw, and 1 during VBlank. 
-    ///           VDraw lasts for 160 scanlines; VBlank follows after that and lasts 68
-    ///           scanlines. Checking this is one alternative to checking REG_VCOUNT. 
-    vrefresh_status: bool,
+    pub is_vblank: bool,
     /// 1   (G) = H Refresh status. This will be 0 during HDraw, and 1 during HBlank HDraw
-    ///           lasts for approximately 1004 cycles; HBlank follows, and lasts
-    ///           approximately 228 cycles, though the time and length of HBlank may in
-    ///           fact vary based on the number of sprites and on rotation/scaling/blending
-    ///           effects being performed on the current line. 
-    hrefresh_status: bool,
+    pub is_hblank: bool,
     /// 2   (Z) = VCount Triggered Status. Gets set to 1 when a Y trigger interrupt occurs. 
-    vcount_triggered: bool,
+    pub vcount_triggered: bool,
     /// 3   (V) = Enables LCD's VBlank IRQ. This interrupt goes off at the start of VBlank. 
     vblank_irq_enabled: bool,
     /// 4   (H) = Enables LCD's HBlank IRQ. This interrupt goes off at the start of HBlank.
@@ -332,8 +327,8 @@ struct DispStat {
 impl DispStat {
     pub const fn new() -> DispStat {
         DispStat {
-            vrefresh_status: false,
-            hrefresh_status: false,
+            is_vblank: false,
+            is_hblank: false,
             vcount_triggered: false,
             vblank_irq_enabled: false,
             hblank_irq_enabled: false,

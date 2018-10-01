@@ -26,3 +26,6 @@ pub const GRAPHICS_END: u32 = 0x4000055;
 // DMA
 pub const DMA_START: u32 = 0x40000B0;
 pub const DMA_END: u32 = 0x40000DF;
+pub const DMA_SAD: [u32; 4] = [0x40000B0, 0x40000BC, 0x40000C8, 0x40000D4];
+pub const DMA_DAD: [u32; 4] = [0x40000B4, 0x40000C0, 0x40000CC, 0x40000D8];
+pub const DMA_CNT: [u32; 4] = [0x40000BA, 0x40000C6, 0x40000D2, 0x40000DE];
