@@ -125,8 +125,8 @@ impl Memory {
         match addr {
             GRAPHICS_START...GRAPHICS_END =>
                 self.update_graphics_byte(addr, val),
-            // DMA_START...DMA_END =>
-                // self.dma.set_byte(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_byte(addr, val),
             _ => ()
         }
     }
@@ -141,8 +141,8 @@ impl Memory {
         match addr {
             GRAPHICS_START...GRAPHICS_END =>
                 self.update_graphics_hw(addr, val),
-            // DMA_START...DMA_END =>
-                // self.dma.set_halfword(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_hw(addr, val),
             _ => ()
         }
     }
@@ -159,8 +159,8 @@ impl Memory {
         match addr {
             GRAPHICS_START...GRAPHICS_END =>
                 self.update_graphics_word(addr, val),
-            // DMA_START...DMA_END =>
-                // self.dma.set_word(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_word(addr, val),
             _ => ()
         }
     }
