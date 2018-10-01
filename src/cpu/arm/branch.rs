@@ -1,5 +1,5 @@
 use ::cpu::CPU;
-use ::cpu::status_reg::CPUMode;
+use ::cpu::status_reg::InstructionSet;
 use ::util;
 
 /// This instruction specifies a jump of +/- 32Mbytes. The branch offset must take
@@ -34,7 +34,7 @@ impl Branch {
 
     pub fn run(&self, cpu: &mut CPU) {
         if self.link {
-            let prefetch = if cpu.cpsr.t == CPUMode::THUMB { 2 } else { 4 };
+            let prefetch = if cpu.cpsr.isa == InstructionSet::THUMB { 2 } else { 4 };
             let ret = cpu.get_reg(15) - prefetch;
             cpu.set_reg(14, ret);
         }

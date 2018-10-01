@@ -5,7 +5,7 @@ pub mod status_reg;
 
 use self::arm::RegOrImm;
 use self::arm::data::apply_shift;
-use self::status_reg::{CPUMode, PSR, ProcessorMode};
+use self::status_reg::{InstructionSet, PSR, CPUMode};
 use self::pipeline::{
     decode_arm,
     decode_thumb,
@@ -61,7 +61,7 @@ impl CPUWrapper {
 
     pub fn fetch(&mut self) {
         let pc = self.cpu.get_reg(15);
-        self.pipeline[self.idx] = if self.cpu.cpsr.t == CPUMode::THUMB {
+        self.pipeline[self.idx] = if self.cpu.cpsr.isa == InstructionSet::THUMB {
             PipelineInstruction::RawTHUMB(self.cpu.mem.get_halfword(pc))
         } else {
             PipelineInstruction::RawARM(self.cpu.mem.get_word(pc))
@@ -178,7 +178,7 @@ impl CPU {
     }
 
     pub fn incr_pc(&mut self) {
-        let offset = if self.cpsr.t == CPUMode::THUMB { 2 } else { 4 };
+        let offset = if self.cpsr.isa == InstructionSet::THUMB { 2 } else { 4 };
         self.r[15] += offset;
     }
 
@@ -194,17 +194,17 @@ impl CPU {
             15 |
             0 ... 7 => self.r[reg],
             8 ... 12 => match self.cpsr.mode {
-                ProcessorMode::FIQ => self.r_fiq[reg - 8],
+                CPUMode::FIQ => self.r_fiq[reg - 8],
                 _ => self.r[reg]
             },
             13 ... 14 => match self.cpsr.mode {
-                ProcessorMode::USR |
-                ProcessorMode::SYS => self.r[reg],
-                ProcessorMode::FIQ => self.r_fiq[reg - 8],
-                ProcessorMode::IRQ => self.r_irq[reg - 13],
-                ProcessorMode::UND => self.r_und[reg - 13],
-                ProcessorMode::ABT => self.r_abt[reg - 13],
-                ProcessorMode::SVC => self.r_svc[reg - 13],
+                CPUMode::USR |
+                CPUMode::SYS => self.r[reg],
+                CPUMode::FIQ => self.r_fiq[reg - 8],
+                CPUMode::IRQ => self.r_irq[reg - 13],
+                CPUMode::UND => self.r_und[reg - 13],
+                CPUMode::ABT => self.r_abt[reg - 13],
+                CPUMode::SVC => self.r_svc[reg - 13],
             },
             _ => panic!("tried to access register {}", reg)
         }
@@ -215,17 +215,17 @@ impl CPU {
             15 |
             0 ... 7 => self.r[reg] = val,
             8 ... 12 => match self.cpsr.mode {
-                ProcessorMode::FIQ => self.r_fiq[reg - 8] = val,
+                CPUMode::FIQ => self.r_fiq[reg - 8] = val,
                 _ => self.r[reg] = val
             },
             13 ... 14 => match self.cpsr.mode {
-                ProcessorMode::USR |
-                ProcessorMode::SYS => self.r[reg] = val,
-                ProcessorMode::FIQ => self.r_fiq[reg - 8] = val,
-                ProcessorMode::IRQ => self.r_irq[reg - 13] = val,
-                ProcessorMode::UND => self.r_und[reg - 13] = val,
-                ProcessorMode::ABT => self.r_abt[reg - 13] = val,
-                ProcessorMode::SVC => self.r_svc[reg - 13] = val,
+                CPUMode::USR |
+                CPUMode::SYS => self.r[reg] = val,
+                CPUMode::FIQ => self.r_fiq[reg - 8] = val,
+                CPUMode::IRQ => self.r_irq[reg - 13] = val,
+                CPUMode::UND => self.r_und[reg - 13] = val,
+                CPUMode::ABT => self.r_abt[reg - 13] = val,
+                CPUMode::SVC => self.r_svc[reg - 13] = val,
             },
             _ => panic!("tried to set register {}", reg)
         };
@@ -237,7 +237,7 @@ impl CPU {
         let mut addr = self.get_reg(params.base_reg);
         let offset = self.get_offset(&params.offset);
         // word align the PC in THUMB mode if using as offset
-        if self.cpsr.t == CPUMode::THUMB && params.base_reg == 15 {
+        if self.cpsr.isa == InstructionSet::THUMB && params.base_reg == 15 {
             addr &= !2;
         }
         if params.pre_index {
@@ -308,7 +308,7 @@ impl CPU {
     }
 
     fn set_isa(&mut self, thumb: bool) {
-        self.cpsr.t = if thumb { CPUMode::THUMB } else { CPUMode::ARM };
+        self.cpsr.isa = if thumb { InstructionSet::THUMB } else { InstructionSet::ARM };
     }
 
     fn get_offset(&self, offset: &RegOrImm) -> u32 {

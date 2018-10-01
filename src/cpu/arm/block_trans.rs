@@ -1,5 +1,5 @@
 use ::cpu::CPU;
-use ::cpu::status_reg::ProcessorMode;
+use ::cpu::status_reg::CPUMode;
 use ::util;
 
 /// Load or store any subset of the currently visible registers
@@ -39,7 +39,7 @@ impl BlockDataTransfer {
         if self.rn == 15 {
             panic!("can't use R15 as base in any LDM or STM instruction");
         }
-        if self.force && cpu.cpsr.mode == ProcessorMode::USR {
+        if self.force && cpu.cpsr.mode == CPUMode::USR {
             panic!("can't set S bit in a non privileged mode");
         }
 
@@ -53,7 +53,7 @@ impl BlockDataTransfer {
                 force_user_bank = true;
                 // temporarily switch to USR mode so that get/set reg refers
                 // to the user bank registers
-                cpu.cpsr.mode = ProcessorMode::USR;
+                cpu.cpsr.mode = CPUMode::USR;
             }
         }
         

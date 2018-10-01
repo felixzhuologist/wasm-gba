@@ -1,5 +1,5 @@
 use ::cpu::CPU;
-use ::cpu::status_reg::CPUMode;
+use ::cpu::status_reg::InstructionSet;
 use ::util;
 
 /// This instruction performs a branch by copying the contents of a single register
@@ -47,7 +47,7 @@ mod test {
         ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(15), 0x1123);
-        assert_eq!(cpu.cpsr.t, CPUMode::THUMB);
+        assert_eq!(cpu.cpsr.isa, InstructionSet::THUMB);
         assert!(cpu.should_flush);
     }
 
@@ -60,7 +60,7 @@ mod test {
         ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(15), 0);
-        assert_eq!(cpu.cpsr.t, CPUMode::ARM);
+        assert_eq!(cpu.cpsr.isa, InstructionSet::ARM);
         assert!(cpu.should_flush);
     }
 }

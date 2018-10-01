@@ -1,6 +1,6 @@
 use super::RegOrImm;
 use ::cpu::CPU;
-use ::cpu::status_reg::{CPUMode, ProcessorMode};
+use ::cpu::status_reg::{InstructionSet, CPUMode};
 use ::util;
 
 pub enum StateRegType {
@@ -134,9 +134,9 @@ mod test {
     #[test]
     fn read_cpsr() {
         let mut cpu = CPU::new();
-        cpu.cpsr.c = true;
-        cpu.cpsr.t = CPUMode::THUMB;
-        cpu.cpsr.mode = ProcessorMode::FIQ;
+        cpu.cpsr.carry = true;
+        cpu.cpsr.isa = InstructionSet::THUMB;
+        cpu.cpsr.mode = CPUMode::FIQ;
 
         let ins = PSRTransfer {
             trans: TransferType::Read { stype: StateRegType::Current, dest: 0 }

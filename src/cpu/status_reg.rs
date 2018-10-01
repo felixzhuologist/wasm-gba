@@ -6,7 +6,7 @@ use num::FromPrimitive;
 enum_from_primitive! {
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ProcessorMode {
+pub enum CPUMode {
     USR = 0b10000,
     /// fast interrupt mode supports a data transfer or channel process
     FIQ = 0b10001,
@@ -25,7 +25,7 @@ pub enum ProcessorMode {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum CPUMode {
+pub enum InstructionSet {
     ARM,
     THUMB
 }
@@ -53,50 +53,50 @@ pub enum CPUMode {
 /// manipulation each time we want to get a specific flag, at the expense of
 /// more space
 pub struct PSR {
-    pub n: bool,
-    pub z: bool,
-    pub c: bool,
-    pub v: bool,
-    pub i: bool,
-    pub f: bool,
-    pub t: CPUMode,
-    pub mode: ProcessorMode
+    pub neg: bool,
+    pub zero: bool,
+    pub carry: bool,
+    pub overflow: bool,
+    pub irq: bool,
+    pub fiq: bool,
+    pub isa: InstructionSet,
+    pub mode: CPUMode
 }
 
 impl PSR {
     pub const fn new() -> PSR {
         PSR {
-            n: false,
-            z: false,
-            c: false,
-            v: false,
-            i: false,
-            f: false,
-            t: CPUMode::ARM,
-            mode: ProcessorMode::SVC
+            neg: false,
+            zero: false,
+            carry: false,
+            overflow: false,
+            irq: false,
+            fiq: false,
+            isa: InstructionSet::ARM,
+            mode: CPUMode::SVC
         }
     }
 
     pub fn to_u32(&self) -> u32 {
-        ((self.n as u32) << 31) |
-        ((self.z as u32) << 30) |
-        ((self.c as u32) << 29) |
-        ((self.v as u32) << 28) |
-        ((self.i as u32) << 7) |
-        ((self.f as u32) << 6) |
-        ((match self.t { CPUMode::ARM => 0, CPUMode::THUMB => 1 }) << 5) |
+        ((self.neg as u32) << 31) |
+        ((self.zero as u32) << 30) |
+        ((self.carry as u32) << 29) |
+        ((self.overflow as u32) << 28) |
+        ((self.irq as u32) << 7) |
+        ((self.fiq as u32) << 6) |
+        ((match self.isa { InstructionSet::ARM => 0, InstructionSet::THUMB => 1 }) << 5) |
         (self.mode as u32)
     }
 
     pub fn from_u32(&mut self, val: u32) {
-        self.n = util::get_bit(val, 31);
-        self.z = util::get_bit(val, 30);
-        self.c = util::get_bit(val, 29);
-        self.v = util::get_bit(val, 28);
-        self.i = util::get_bit(val, 7);
-        self.f = util::get_bit(val, 6);
-        self.t = if util::get_bit(val, 5) { CPUMode::THUMB } else { CPUMode::ARM };
-        self.mode = ProcessorMode::from_u32(val & 0b11111).unwrap();
+        self.neg = util::get_bit(val, 31);
+        self.zero = util::get_bit(val, 30);
+        self.carry = util::get_bit(val, 29);
+        self.overflow = util::get_bit(val, 28);
+        self.irq = util::get_bit(val, 7);
+        self.fiq = util::get_bit(val, 6);
+        self.isa = if util::get_bit(val, 5) { InstructionSet::THUMB } else { InstructionSet::ARM };
+        self.mode = CPUMode::from_u32(val & 0b11111).unwrap();
     }
 }
 

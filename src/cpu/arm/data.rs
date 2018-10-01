@@ -1,7 +1,7 @@
 use num::FromPrimitive;
 use super::RegOrImm;
 use ::cpu::CPU;
-use ::cpu::status_reg::CPUMode;
+use ::cpu::status_reg::InstructionSet;
 use ::util;
 
 enum_from_primitive! {
@@ -64,7 +64,7 @@ impl DataProc {
 
     pub fn run(&self, cpu: &mut CPU) {
         let mut op1 = cpu.get_reg(self.rn);
-        if cpu.cpsr.t == CPUMode::THUMB && self.rn == 15 {
+        if cpu.cpsr.isa == InstructionSet::THUMB && self.rn == 15 {
             // TODO: this is probably only for the load_addr THUMB instruction...
             op1 &= !2;
         }
@@ -85,14 +85,14 @@ impl DataProc {
             Op::ADD => op1.overflowing_add(op2),
             Op::ADC => {
                 let (r1, c1) = op1.overflowing_add(op2);
-                let (r2, c2) = r1.overflowing_add(cpu.cpsr.c as u32);
+                let (r2, c2) = r1.overflowing_add(cpu.cpsr.carry as u32);
                 (r2, c1 || c2)
             },
             Op::SBC => {
                 let (r1, c1) = op1.overflowing_sub(op2);
                 let (r2, c2) = r1.overflowing_sub(1);
                 let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.c as u32);
+                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
                 // if we "underflowed" then overflowed, then they cancel out
                 (result, sub_overflow ^ add_overflow)
             },
@@ -100,7 +100,7 @@ impl DataProc {
                 let (r1, c1) = op2.overflowing_sub(op1);
                 let (r2, c2) = r1.overflowing_sub(1);
                 let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.c as u32);
+                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
                 // if we "underflowed" then overflowed, then they cancel out
                 (result, sub_overflow ^ add_overflow)
             },
@@ -133,9 +133,9 @@ impl DataProc {
         if self.set_flags || !should_write  {
             // TODO: how are we supposed to know if the operands are signed?
             // and detect if the V flag should be set
-            cpu.cpsr.c = carry_out;
-            cpu.cpsr.z = result == 0;
-            cpu.cpsr.n = ((result >> 31) & 1) == 1;
+            cpu.cpsr.carry = carry_out;
+            cpu.cpsr.zero = result == 0;
+            cpu.cpsr.neg = ((result >> 31) & 1) == 1;
         }
 
         if self.rd == 15 && self.set_flags {
@@ -160,7 +160,7 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
     match (util::get_bit(shift, 2), util::get_bit(shift, 1)) {
         (false, false) => { // logical shift left
             if shift_amount == 0 {
-                (val, cpu.cpsr.c)
+                (val, cpu.cpsr.carry)
             } else if shift_amount > 32 {
                 (0, false)
             } else if shift_amount == 32 {
@@ -200,7 +200,7 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
             // RSR #0 is used to encode RRX
             if shift_amount == 0 {
                 let carry_out = (val & 1) == 1;
-                let result = (val >> 1) | ((cpu.cpsr.c as u32) << 31);
+                let result = (val >> 1) | ((cpu.cpsr.carry as u32) << 31);
                 (result, carry_out)
             } else {
                 let result = val.rotate_right(shift_amount);
@@ -306,7 +306,7 @@ mod test {
         assert_eq!(apply_shift(&cpu, 0b00101_000, 3), (0xF7123455 << 5, false));
 
         // check that LSL by 0 retains the current carry flag
-        cpu.cpsr.c = true;
+        cpu.cpsr.carry = true;
         assert_eq!(apply_shift(&cpu, 0, 0), (0, true));
 
         // lsl 32 with low bit = 0
@@ -381,7 +381,7 @@ mod test {
         cpu.set_reg(0, 0x3123453F);
         assert_eq!(apply_shift(&cpu, 0b00000_110, 0), (0x3123453F >> 1, true));
 
-        cpu.cpsr.c = true;
+        cpu.cpsr.carry = true;
         cpu.set_reg(1, 0xFFFFFFFE);
         assert_eq!(apply_shift(&cpu, 0b00000_110, 1), (0xFFFFFFFF, false));
 
@@ -421,9 +421,9 @@ mod test {
         ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(3), 21);
-        assert_eq!(cpu.cpsr.c, false);
-        assert_eq!(cpu.cpsr.z, false);
-        assert_eq!(cpu.cpsr.n, false);
+        assert_eq!(cpu.cpsr.carry, false);
+        assert_eq!(cpu.cpsr.zero, false);
+        assert_eq!(cpu.cpsr.neg, false);
     }
 
     #[test]
@@ -442,8 +442,8 @@ mod test {
         ins.run(&mut cpu);
 
         assert_eq!(cpu.get_reg(3), 4);
-        assert_eq!(cpu.cpsr.c, true);
-        assert_eq!(cpu.cpsr.z, false);
-        assert_eq!(cpu.cpsr.n, false);
+        assert_eq!(cpu.cpsr.carry, true);
+        assert_eq!(cpu.cpsr.zero, false);
+        assert_eq!(cpu.cpsr.neg, false);
     }
 }

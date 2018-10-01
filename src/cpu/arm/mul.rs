@@ -44,8 +44,8 @@ impl Multiply {
         }
         cpu.set_reg(self.rd, result as u32);
         if self.set_flags {
-            cpu.cpsr.n = ((result >> 31) & 1) == 1;
-            cpu.cpsr.z = result == 0;
+            cpu.cpsr.neg = ((result >> 31) & 1) == 1;
+            cpu.cpsr.zero = result == 0;
         }
     }
 }

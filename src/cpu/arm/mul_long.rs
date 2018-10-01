@@ -62,8 +62,8 @@ impl MultiplyLong {
         cpu.set_reg(self.rdhi, top);
         cpu.set_reg(self.rdlo, bot);
         if self.set_flags {
-            cpu.cpsr.n = ((top >> 31) & 1) == 1;
-            cpu.cpsr.z = result == 0;
+            cpu.cpsr.neg = ((top >> 31) & 1) == 1;
+            cpu.cpsr.zero = result == 0;
         }
     }
 }

@@ -154,20 +154,20 @@ pub enum Instruction {
 /// Return whether the current state of the CPU's flags matches the given condition
 pub fn satisfies_cond(cpsr: &PSR, cond: u32) -> bool {
     match CondField::from_u32(cond).unwrap() {
-        CondField::EQ => cpsr.z,
-        CondField::NE => !cpsr.z,
-        CondField::CS => cpsr.c,
-        CondField::CC => !cpsr.c,
-        CondField::MI => cpsr.n,
-        CondField::PL => !cpsr.n,
-        CondField::VS => cpsr.v,
-        CondField::VC => !cpsr.v,
-        CondField::HI => cpsr.c && !cpsr.v,
-        CondField::LS => !cpsr.c || cpsr.v,
-        CondField::GE => cpsr.n == cpsr.v,
-        CondField::LT => cpsr.n != cpsr.v,
-        CondField::GT => !cpsr.z && (cpsr.n == cpsr.v),
-        CondField::LE => cpsr.z || (cpsr.n != cpsr.v),
+        CondField::EQ => cpsr.zero,
+        CondField::NE => !cpsr.zero,
+        CondField::CS => cpsr.carry,
+        CondField::CC => !cpsr.carry,
+        CondField::MI => cpsr.neg,
+        CondField::PL => !cpsr.neg,
+        CondField::VS => cpsr.overflow,
+        CondField::VC => !cpsr.overflow,
+        CondField::HI => cpsr.carry && !cpsr.overflow,
+        CondField::LS => !cpsr.carry || cpsr.overflow,
+        CondField::GE => cpsr.neg == cpsr.overflow,
+        CondField::LT => cpsr.neg != cpsr.overflow,
+        CondField::GT => !cpsr.zero && (cpsr.neg == cpsr.overflow),
+        CondField::LE => cpsr.zero || (cpsr.neg != cpsr.overflow),
         CondField::AL => true
     }
 }
