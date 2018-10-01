@@ -10,7 +10,6 @@
 //! 5: 160x128 15 bit bitmap with page flip
 
 use super::addrs::*;
-use super::super::addrs::IO_START;
 use super::super::Memory;
 use core::cmp::min;
 
@@ -88,37 +87,38 @@ impl GraphicsIO {
 // update but rounded down to the nearest hw
 impl Memory {
     pub fn update_graphics_byte(&mut self, addr: u32, val: u8) {
+        let graphics = &mut self.graphics;
         match addr {
             DISPCNT_LO => {
                 if (val & 0x7) <= 5 {
-                    self.graphics.disp_cnt.bg_mode = val & 0x7;
+                    graphics.disp_cnt.bg_mode = val & 0x7;
                 }
-                self.graphics.disp_cnt.frame_base =
+                graphics.disp_cnt.frame_base =
                     if (val & 0x10) > 0 { 0x600A000 } else { 0x60000000 };
-                self.graphics.disp_cnt.hblank_interval_free = (val & 0x20) == 0x20;
+                graphics.disp_cnt.hblank_interval_free = (val & 0x20) == 0x20;
             },
             DISPCNT_HI => {
                 for i in 0..4 {
-                    self.graphics.disp_cnt.bg_enabled[i] = (val & (1 << i)) > 0;
+                    graphics.disp_cnt.bg_enabled[i] = (val & (1 << i)) > 0;
                 }
-                self.graphics.disp_cnt.window_enabled[0] = (val & 0x20) == 0x20;
-                self.graphics.disp_cnt.window_enabled[1] = (val & 0x40) == 0x40;
-                self.graphics.disp_cnt.obj_win_enabled = (val & 0x80) == 0x80;
+                graphics.disp_cnt.window_enabled[0] = (val & 0x20) == 0x20;
+                graphics.disp_cnt.window_enabled[1] = (val & 0x40) == 0x40;
+                graphics.disp_cnt.obj_win_enabled = (val & 0x80) == 0x80;
             },
             DISPSTAT_LO => {
-                self.graphics.disp_stat.vblank_irq_enabled = (val & 0x8) == 0x8;
-                self.graphics.disp_stat.hblank_irq_enabled = (val & 0x10) == 0x10;
-                self.graphics.disp_stat.vcount_irq_enabled = (val & 0x20) == 0x20;
+                graphics.disp_stat.vblank_irq_enabled = (val & 0x8) == 0x8;
+                graphics.disp_stat.hblank_irq_enabled = (val & 0x10) == 0x10;
+                graphics.disp_stat.vcount_irq_enabled = (val & 0x20) == 0x20;
             },
             DISPSTAT_HI => {
-                self.graphics.disp_stat.vcount_line_trigger = val
+                graphics.disp_stat.vcount_line_trigger = val
             },
             BGCNT_START...BGCNT_END => {
                 let bg = ((addr - BGCNT_START) / 2) as usize;
                 if addr % 2 == 1 { // high byte
-                    self.graphics.bg_cnt[bg].map_addr =
+                    graphics.bg_cnt[bg].map_addr =
                         0x6000000 + (val as u32 & 0x1F)*0x800;
-                    self.graphics.bg_cnt[bg].overflow = (val & 0x20) == 0x20;
+                    graphics.bg_cnt[bg].overflow = (val & 0x20) == 0x20;
                     let (width, height) = match val >> 6 { // upper 2 bits
                         0 => (256, 256),
                         1 => (512, 256),
@@ -126,65 +126,65 @@ impl Memory {
                         3 => (512, 512),
                         _ => panic!("should not get here")
                     };
-                    self.graphics.bg_cnt[bg].width = width;
-                    self.graphics.bg_cnt[bg].height = height;
+                    graphics.bg_cnt[bg].width = width;
+                    graphics.bg_cnt[bg].height = height;
                 } else { // low byte
-                    self.graphics.bg_cnt[bg].priority = val & 3;
-                    self.graphics.bg_cnt[bg].tile_addr =
+                    graphics.bg_cnt[bg].priority = val & 3;
+                    graphics.bg_cnt[bg].tile_addr =
                         0x6000000 + ((val >> 2) as u32 & 3)*0x4000;
-                    self.graphics.bg_cnt[bg].mosaic_enabled = (val & 0x40) == 0x40;
-                    self.graphics.bg_cnt[bg].depth = if val >= 8 { 8 } else { 4 };
+                    graphics.bg_cnt[bg].mosaic_enabled = (val & 0x40) == 0x40;
+                    graphics.bg_cnt[bg].depth = if val >= 8 { 8 } else { 4 };
                 }
             },
             BG_OFFSET_START...BG_OFFSET_END => {
                 let bg = ((addr - BG_OFFSET_START) / 4) as usize;
                 if (addr & 0x20) == 0 { // horizontal coord
                     if (addr % 2) == 0 { // low byte
-                        self.graphics.bg_offset_x[bg] &= 0xFF00;
-                        self.graphics.bg_offset_x[bg] |= val as u16;
+                        graphics.bg_offset_x[bg] &= 0xFF00;
+                        graphics.bg_offset_x[bg] |= val as u16;
                     } else { // high byte
-                        self.graphics.bg_offset_x[bg] &= 0x00FF;
-                        self.graphics.bg_offset_x[bg] |= (val as u16 & 3) << 8;
+                        graphics.bg_offset_x[bg] &= 0x00FF;
+                        graphics.bg_offset_x[bg] |= (val as u16 & 3) << 8;
                     }
                 } else { // vertical coord
                     if (addr % 2) == 0 { // low byte
-                        self.graphics.bg_offset_y[bg] &= 0xFF00;
-                        self.graphics.bg_offset_y[bg] |= val as u16;
+                        graphics.bg_offset_y[bg] &= 0xFF00;
+                        graphics.bg_offset_y[bg] |= val as u16;
                     } else { // high byte
-                        self.graphics.bg_offset_y[bg] &= 0x00FF;
-                        self.graphics.bg_offset_y[bg] |= (val as u16 & 3) << 8;
+                        graphics.bg_offset_y[bg] &= 0x00FF;
+                        graphics.bg_offset_y[bg] |= (val as u16 & 3) << 8;
                     }
                 }
             },
             BG_AFFINE_START...BG_AFFINE_END => {
                 let bg = ((addr - BG_AFFINE_START) / 10) as usize;
-                let hw_raw = self.get_halfword(addr & !1);
-                let word_raw = self.get_word(addr & !1);
+                let hw_raw = self.raw.get_halfword(addr & !1);
+                let word_raw = self.raw.get_word(addr & !1);
                 match addr % 16 {
-                    0...1 => self.graphics.bg_affine[bg].dx = to_float_hw(hw_raw),
-                    2...3 => self.graphics.bg_affine[bg].dmx = to_float_hw(hw_raw),
-                    4...5 => self.graphics.bg_affine[bg].dy = to_float_hw(hw_raw),
-                    6...7 => self.graphics.bg_affine[bg].dmy = to_float_hw(hw_raw),
-                    8...12 => self.graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
-                    13...15 => self.graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    0...1 => graphics.bg_affine[bg].dx = to_float_hw(hw_raw),
+                    2...3 => graphics.bg_affine[bg].dmx = to_float_hw(hw_raw),
+                    4...5 => graphics.bg_affine[bg].dy = to_float_hw(hw_raw),
+                    6...7 => graphics.bg_affine[bg].dmy = to_float_hw(hw_raw),
+                    8...12 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    13...15 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
                     _ => panic!("should not get here")
                 }
             },
             WIN_COORD_START...WIN_COORD_END => {
                 match addr - WIN_COORD_START {
-                    0 => self.graphics.window_coords[0].right = min(val, 240),
-                    1 => self.graphics.window_coords[0].left = val,
-                    2 => self.graphics.window_coords[1].right = min(val, 240),
-                    3 => self.graphics.window_coords[1].left = val,
-                    4 => self.graphics.window_coords[0].bottom = min(val, 160),
-                    5 => self.graphics.window_coords[0].top = val,
-                    6 => self.graphics.window_coords[1].bottom = min(val, 160),
-                    7 => self.graphics.window_coords[1].top = val,
+                    0 => graphics.window_coords[0].right = min(val, 240),
+                    1 => graphics.window_coords[0].left = val,
+                    2 => graphics.window_coords[1].right = min(val, 240),
+                    3 => graphics.window_coords[1].left = val,
+                    4 => graphics.window_coords[0].bottom = min(val, 160),
+                    5 => graphics.window_coords[0].top = val,
+                    6 => graphics.window_coords[1].bottom = min(val, 160),
+                    7 => graphics.window_coords[1].top = val,
                     _ => panic!("should not get here")
                 }
 
                 let bg = ((addr >> 1) & 1) as usize;
-                let mut coords = &mut self.graphics.window_coords[bg];
+                let mut coords = &mut graphics.window_coords[bg];
                 // TODO: this is done differently in GBE?
                 if coords.left < coords.right {
                     coords.right = 240;
@@ -194,7 +194,7 @@ impl Memory {
                 }
             },
             WIN_SETTINGS_START...WIN_SETTINGS_END => {
-                let mut settings = &mut self.graphics.window_settings[(addr % 8) as usize];
+                let mut settings = &mut graphics.window_settings[(addr % 8) as usize];
                 settings.bg[0] = (val & 1) == 1;
                 settings.bg[1] = (val & 2) == 2;
                 settings.bg[2] = (val & 4) == 4;
@@ -203,21 +203,21 @@ impl Memory {
                 settings.blend =  (val & 32) == 32;
             },
             MOSAIC_LO => {
-                self.graphics.bg_mos_hsize = val & 0xF;
-                self.graphics.bg_mos_vsize = val >> 4;
+                graphics.bg_mos_hsize = val & 0xF;
+                graphics.bg_mos_vsize = val >> 4;
             },
             MOSAIC_HI => {
-                self.graphics.obj_mos_hsize = val & 0xF;
-                self.graphics.obj_mos_vsize = val >> 4;
+                graphics.obj_mos_hsize = val & 0xF;
+                graphics.obj_mos_vsize = val >> 4;
             },
             BLDCNT_LO => {
-                self.graphics.blend_params.source[0] = (val & 1) == 1;
-                self.graphics.blend_params.source[1] = (val & 2) == 2;
-                self.graphics.blend_params.source[2] = (val & 4) == 4;
-                self.graphics.blend_params.source[3] = (val & 8) == 8;
-                self.graphics.blend_params.source[4] = (val & 16) == 16;
-                self.graphics.blend_params.source[5] = (val & 32) == 32;
-                self.graphics.blend_params.mode = match val >> 6 {
+                graphics.blend_params.source[0] = (val & 1) == 1;
+                graphics.blend_params.source[1] = (val & 2) == 2;
+                graphics.blend_params.source[2] = (val & 4) == 4;
+                graphics.blend_params.source[3] = (val & 8) == 8;
+                graphics.blend_params.source[4] = (val & 16) == 16;
+                graphics.blend_params.source[5] = (val & 32) == 32;
+                graphics.blend_params.mode = match val >> 6 {
                     0 => BlendType::Off,
                     1 => BlendType::AlphaBlend,
                     2 => BlendType::Lighten,
@@ -226,16 +226,16 @@ impl Memory {
                 };
             },
             BLDCNT_HI => {
-                self.graphics.blend_params.target[0] = (val & 1) == 1;
-                self.graphics.blend_params.target[1] = (val & 2) == 2;
-                self.graphics.blend_params.target[2] = (val & 4) == 4;
-                self.graphics.blend_params.target[3] = (val & 8) == 8;
-                self.graphics.blend_params.target[4] = (val & 16) == 16;
-                self.graphics.blend_params.target[5] = (val & 32) == 32;
+                graphics.blend_params.target[0] = (val & 1) == 1;
+                graphics.blend_params.target[1] = (val & 2) == 2;
+                graphics.blend_params.target[2] = (val & 4) == 4;
+                graphics.blend_params.target[3] = (val & 8) == 8;
+                graphics.blend_params.target[4] = (val & 16) == 16;
+                graphics.blend_params.target[5] = (val & 32) == 32;
             },
-            BLDALPHA_LO => { self.graphics.alpha_a_coef = to_coeff(val); },
-            BLDALPHA_HI => { self.graphics.alpha_b_coef = to_coeff(val); },
-            BLDY => { self.graphics.brightness_coef = to_coeff(val); },
+            BLDALPHA_LO => { graphics.alpha_a_coef = to_coeff(val); },
+            BLDALPHA_HI => { graphics.alpha_b_coef = to_coeff(val); },
+            BLDY => { graphics.brightness_coef = to_coeff(val); },
             _ => () // unused
         }
     }

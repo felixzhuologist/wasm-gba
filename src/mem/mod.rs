@@ -6,6 +6,72 @@ use mem::io::addrs::*;
 use self::addrs::*;
 
 pub struct Memory {
+    raw: RawMemory,
+    // these are parsed versions of raw data stored in memory that must be updated
+    // on write so that the values are in sync with the actual raw data
+    graphics: io::graphics::GraphicsIO,
+    dma: io::dma::DMA,
+}
+
+impl Memory {
+    pub const fn new() -> Memory {
+        Memory {
+            raw: RawMemory::new(),
+            graphics: io::graphics::GraphicsIO::new(),
+            dma: io::dma::DMA::new(),
+        }
+    }
+
+    pub fn get_byte(&self, addr: u32) -> u8 {
+        self.raw.get_byte(addr)
+    }
+
+    pub fn get_halfword(&self, addr: u32) -> u16 {
+        self.raw.get_halfword(addr)
+    }
+
+    pub fn get_word(&self, addr: u32) -> u32 {
+        self.raw.get_word(addr)
+    }
+
+    pub fn set_byte(&mut self, addr: u32, val: u8) {
+        self.raw.set_byte(addr, val);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_byte(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_byte(addr, val),
+            _ => ()
+        }
+    }
+
+    pub fn set_halfword(&mut self, addr: u32, val: u32) {
+        self.raw.set_halfword(addr, val);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_hw(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_hw(addr, val),
+            _ => ()
+        }
+    }
+
+    pub fn set_word(&mut self, addr: u32, val: u32) {
+        self.raw.set_word(addr, val);
+
+        match addr {
+            GRAPHICS_START...GRAPHICS_END =>
+                self.update_graphics_word(addr, val),
+            DMA_START...DMA_END =>
+                self.update_dma_word(addr, val),
+            _ => ()
+        }
+    }
+}
+
+struct RawMemory {
     /// contains the BIOS
     sysrom: [u8; 0x3FF],
     /// space for game data/code; largest area of RAM but memory transfers are
@@ -31,16 +97,11 @@ pub struct Memory {
     // either SRAM or flash ROM used for saving game data
     // TODO: allocate on the javascript side?
     // cart: Vec<u8>,
-
-    // these are parsed versions of raw data stored in memory that must be updated
-    // on write so that the values are in sync with the actual raw data
-    graphics: io::graphics::GraphicsIO,
-    dma: io::dma::DMA,
 }
 
-impl Memory {
-    pub const fn new() -> Memory {
-        Memory {
+impl RawMemory {
+    pub const fn new() -> RawMemory {
+        RawMemory {
             sysrom: [0; 0x3FF],
             ewram: [0; 0x3FF],
             iwram: [0; 0x7FF],
@@ -50,9 +111,6 @@ impl Memory {
             oam: [0; 0x3FF],
             // pak: Vec::new(),
             // cart: Vec::new(),
-
-            graphics: io::graphics::GraphicsIO::new(),
-            dma: io::dma::DMA::new(),
         }
     }
 
@@ -117,52 +175,22 @@ impl Memory {
     }
 
     pub fn set_byte(&mut self, addr: u32, val: u8) {
-        {
-            let (segment, idx) = self.get_loc_mut(addr);
-            segment[idx] = val;
-        }
-
-        match addr {
-            GRAPHICS_START...GRAPHICS_END =>
-                self.update_graphics_byte(addr, val),
-            DMA_START...DMA_END =>
-                self.update_dma_byte(addr, val),
-            _ => ()
-        }
+        let (segment, idx) = self.get_loc_mut(addr);
+        segment[idx] = val;
     }
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
-        {
-            let (segment, idx) = self.get_loc_mut(addr);
-            segment[idx] = util::get_byte(val, 0) as u8;
-            segment[idx + 1] = util::get_byte(val, 8) as u8;
-        }
-
-        match addr {
-            GRAPHICS_START...GRAPHICS_END =>
-                self.update_graphics_hw(addr, val),
-            DMA_START...DMA_END =>
-                self.update_dma_hw(addr, val),
-            _ => ()
-        }
+        let (segment, idx) = self.get_loc_mut(addr);
+        segment[idx] = util::get_byte(val, 0) as u8;
+        segment[idx + 1] = util::get_byte(val, 8) as u8;
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {
-        {
-            let (segment, idx) = self.get_loc_mut(addr);
-            segment[idx] = util::get_byte(val, 0) as u8;
-            segment[idx + 1] = util::get_byte(val, 8) as u8;
-            segment[idx + 2] = util::get_byte(val, 16) as u8;
-            segment[idx + 3] = util::get_byte(val, 24) as u8;
-        }
-
-        match addr {
-            GRAPHICS_START...GRAPHICS_END =>
-                self.update_graphics_word(addr, val),
-            DMA_START...DMA_END =>
-                self.update_dma_word(addr, val),
-            _ => ()
-        }
+        let (segment, idx) = self.get_loc_mut(addr);
+        segment[idx] = util::get_byte(val, 0) as u8;
+        segment[idx + 1] = util::get_byte(val, 8) as u8;
+        segment[idx + 2] = util::get_byte(val, 16) as u8;
+        segment[idx + 3] = util::get_byte(val, 24) as u8;
     }
 }
 
@@ -172,7 +200,7 @@ mod test {
 
     #[test]
     fn get_byte() {
-        let mut mem = Memory::new();
+        let mut mem = RawMemory::new();
         mem.sysrom[0x2FF] = 10;
         assert_eq!(mem.get_byte(0x2FF), 10);
         mem.ewram[2] = 22;
@@ -191,7 +219,7 @@ mod test {
 
     #[test]
     fn endianness() {
-        let mut mem = Memory::new();
+        let mut mem = RawMemory::new();
         mem.sysrom[0] = 1;
         mem.sysrom[1] = 2;
         mem.sysrom[2] = 3;
@@ -201,7 +229,7 @@ mod test {
 
     #[test]
     fn get_set() {
-        let mut mem = Memory::new();
+        let mut mem = RawMemory::new();
         mem.set_word(0x123, 0xABC001);
         assert_eq!(mem.get_word(0x123), 0xABC001);
     }

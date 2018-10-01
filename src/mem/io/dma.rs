@@ -41,19 +41,19 @@ impl Memory {
         let channel_num = offset as usize / 12;
         match offset % 12 {
             0...3 => { // src
-                let src = self.get_word(addr & !3);
+                let src = self.raw.get_word(addr & !3);
                 let mut channel = &mut self.dma.channels[channel_num];
                 let mask = if channel_num == 0 { 0x7FFFFFF } else { 0xFFFFFFF };
                 channel.src = src & mask;
             },
             4...7 => { // dest
-                let dest = self.get_word(addr & !3);
+                let dest = self.raw.get_word(addr & !3);
                 let mut channel = &mut self.dma.channels[channel_num];
                 let mask = if channel_num == 3 { 0xFFFFFFF } else { 0x7FFFFFF };
                 channel.dest = dest & mask;
             },
             8...9 => { // chunk count
-                let count = self.get_halfword(addr & !1);
+                let count = self.raw.get_halfword(addr & !1);
                 let mut channel = &mut self.dma.channels[channel_num];
                 channel.count = count & 0x3FFF;
             },
@@ -67,7 +67,7 @@ impl Memory {
             // E   (I) = irq
             // F   (N) = enabled
             10...11 => { // cnt register
-                let reg = self.get_halfword(addr & !1);
+                let reg = self.raw.get_halfword(addr & !1);
                 let mut channel = &mut self.dma.channels[channel_num];
                 channel.dest_incr = IncrType::from_u16((reg >> 5) & 0b11).unwrap();
                 channel.src_incr = IncrType::from_u16((reg >> 7) & 0b11).unwrap();
