@@ -127,7 +127,7 @@ impl DataProc {
             cpu.set_reg(self.rd, result);
         }
 
-        if !self.set_flags && should_write {
+        if !self.set_flags && !should_write {
             panic!("trying to use data instruction handler on a MRS/MSR instruction");
         }
     
@@ -446,5 +446,19 @@ mod test {
         assert_eq!(cpu.cpsr.carry, true);
         assert_eq!(cpu.cpsr.zero, false);
         assert_eq!(cpu.cpsr.neg, false);
+    }
+
+    #[test]
+    fn mov() {
+        let mut cpu = CPU::new();
+        let ins = DataProc {
+            opcode: Op::MOV,
+            set_flags: false,
+            rn: 0,
+            rd: 12,
+            op2: RegOrImm::Imm { rotate: 3, value: 1 }
+        };
+        ins.run(&mut cpu);
+        assert_eq!(cpu.get_reg(12), 0x4000000);
     }
 }
