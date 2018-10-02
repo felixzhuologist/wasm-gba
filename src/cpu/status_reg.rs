@@ -71,8 +71,8 @@ impl PSR {
             zero: false,
             carry: false,
             overflow: false,
-            irq: false,
-            fiq: false,
+            irq: true,
+            fiq: true,
             isa: InstructionSet::ARM,
             mode: CPUMode::SVC
         }
