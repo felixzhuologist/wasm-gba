@@ -87,7 +87,7 @@ impl Memory {
 
 pub struct RawMemory {
     /// contains the BIOS
-    sysrom: [u8; 0x3FFF],
+    pub sysrom: [u8; 0x3FFF],
     /// space for game data/code; largest area of RAM but memory transfers are
     /// 16 bit wide which makes it slower than iwram
     ewram: [u8; 0x3FFFF],

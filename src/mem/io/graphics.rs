@@ -15,8 +15,7 @@ use core::cmp::min;
 
 /// Contains all graphics related information from the LCD display I/O registers.
 /// The data in this struct is a mirror of the data from addresses
-/// 0x4000000 - 0x4000060, and is updated using set_byte() each time that segment
-/// of memory is updated.
+/// 0x4000000 - 0x4000060
 pub struct LCD {
     disp_cnt: DispCnt,
     pub disp_stat: DispStat,

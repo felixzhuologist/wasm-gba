@@ -149,8 +149,6 @@ pub enum Instruction {
     Noop
 }
 
-
-
 /// Return whether the current state of the CPU's flags matches the given condition
 pub fn satisfies_cond(cpsr: &PSR, cond: u32) -> bool {
     match CondField::from_u32(cond).unwrap() {

@@ -76,7 +76,7 @@ impl CPUWrapper {
     /// the raw instruction is decoded as a Noop
     pub fn decode(&mut self) {
         // index of the second element from the end
-        let idx = ((self.idx as i8 - 2 as i8) % 3) as usize;
+        let idx = ((self.idx + 2) % 3) as usize;
         match self.pipeline[idx] {
             PipelineInstruction::RawARM(n) => {
                 let cond = util::get_nibble(n, 28);
@@ -97,7 +97,7 @@ impl CPUWrapper {
 
     pub fn execute(&mut self) {
         // index of the third element from the end
-        let idx = ((self.idx as i8 - 3 as i8) % 3) as usize;
+        let idx = ((self.idx + 1) % 3) as usize;
         if let PipelineInstruction::Decoded(ref ins) = self.pipeline[idx] {
             match ins {
                 Instruction::DataProc(ins) => ins.run(&mut self.cpu),
