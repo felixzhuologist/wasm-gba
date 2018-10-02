@@ -2,6 +2,7 @@ use super::RegOrImm;
 use ::cpu::CPU;
 use ::util;
 
+#[derive(Debug)]
 pub enum StateRegType {
     /// CPSR
     Current,
@@ -9,6 +10,7 @@ pub enum StateRegType {
     Saved
 }
 
+#[derive(Debug)]
 pub enum TransferType {
     Read { stype: StateRegType, dest: usize },
     Write { stype: StateRegType, source: RegOrImm }
@@ -18,6 +20,7 @@ pub enum TransferType {
 /// without the S flag set. They allow access to the CPSR/SPSR registers, i.e.
 /// reading CPSR/SPSR of the current mode to a register, or writing a reg/immediate
 /// value to the CPSR/SPSR of the current mode.
+#[derive(Debug)]
 pub struct PSRTransfer {
     trans: TransferType
 }

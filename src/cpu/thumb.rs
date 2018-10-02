@@ -386,6 +386,7 @@ pub fn cond_branch(raw: u16) -> Instruction {
     })
 }
 
+#[derive(Debug)]
 pub struct CondBranch { pub cond: u16, offset: i16 }
 
 // for ARM instructions the condition is checked while decoding but for THUMB
@@ -434,6 +435,7 @@ pub fn long_branch(raw: u16) -> Instruction {
 
 // long_branch is implemented as one instruction to keep the Instruction enum
 // minimal
+#[derive(Debug)]
 pub struct LongBranch { pub first: bool, offset: u16 }
 
 impl LongBranch {

@@ -3,6 +3,7 @@ use ::util;
 
 /// This instruction performs a branch by copying the contents of a single register
 /// into the program counter, and causes a pipeline flush and refill.
+#[derive(Debug)]
 pub struct BranchAndExchange {
     /// contents of this register are written to the PC
     pub reg: usize,

@@ -15,6 +15,18 @@ use self::pipeline::{
 };
 use mem;
 use util;
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(msg: &str);
+}
+
+// A macro to provide `println!(..)`-style syntax for `console.log` logging.
+macro_rules! log {
+    ($($t:tt)*) => (log(&format!($($t)*)))
+}
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
@@ -80,6 +92,7 @@ impl CPUWrapper {
         match self.pipeline[idx] {
             PipelineInstruction::RawARM(n) => {
                 let cond = util::get_nibble(n, 28);
+                log!("{:#X?}", decode_arm(n).unwrap());
                 self.pipeline[idx] = PipelineInstruction::Decoded(
                     if satisfies_cond(&self.cpu.cpsr, cond) {
                         decode_arm(n).unwrap()

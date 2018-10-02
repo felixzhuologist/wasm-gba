@@ -27,6 +27,7 @@ pub enum Op {
 }
 }
 
+#[derive(Debug)]
 pub struct DataProc {
     pub opcode: Op,
     pub set_flags: bool,

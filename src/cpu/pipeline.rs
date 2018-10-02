@@ -132,6 +132,7 @@ fn _decode_thumb(ins: u16) -> (fn(u16) -> Instruction) {
     }
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     DataProc(data::DataProc),
     PSRTransfer(psr::PSRTransfer),

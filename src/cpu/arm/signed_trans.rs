@@ -6,6 +6,7 @@ use ::util;
 /// bytes/halfwords. The memory address is calculated by adding/subtracting an
 /// offset from a base register, which can be written back into the base register
 /// if auto-indexing is required
+#[derive(Debug)]
 pub struct SignedDataTransfer {
     /// if true, add offset before transfer else add after
     pub pre_index: bool,

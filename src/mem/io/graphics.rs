@@ -11,7 +11,8 @@
 
 use super::addrs::*;
 use mem::Memory;
-use core::cmp::min;
+// use core::cmp::min;
+use std::cmp::min;
 
 /// Contains all graphics related information from the LCD display I/O registers.
 /// The data in this struct is a mirror of the data from addresses
