@@ -6,11 +6,11 @@ use mem::io::addrs::*;
 use self::addrs::*;
 
 pub struct Memory {
-    raw: RawMemory,
+    pub raw: RawMemory,
     // these are parsed versions of raw data stored in memory that must be updated
     // on write so that the values are in sync with the actual raw data
-    graphics: io::graphics::LCD,
-    dma: io::dma::DMA,
+    pub graphics: io::graphics::LCD,
+    pub dma: io::dma::DMA,
     pub int: io::interrupt::Interrupt
 }
 
@@ -77,17 +77,23 @@ impl Memory {
             _ => ()
         }
     }
+
+    pub fn load_rom(&mut self, data: &[u8]) {
+        for i in 0..self.raw.sysrom.len() {
+            self.raw.sysrom[i] = data[i];
+        }
+    }
 }
 
-struct RawMemory {
+pub struct RawMemory {
     /// contains the BIOS
-    sysrom: [u8; 0x3FF],
+    sysrom: [u8; 0x3FFF],
     /// space for game data/code; largest area of RAM but memory transfers are
     /// 16 bit wide which makes it slower than iwram
-    ewram: [u8; 0x3FF],
+    ewram: [u8; 0x3FFFF],
     /// fastest RAM segment which is internally embedded in the CPU chip package
     /// with a 32 bit bus
-    iwram: [u8; 0x7FF],
+    iwram: [u8; 0x7FFF],
     /// a mirror of the memory mapped ASIC registers on the GBA used to control
     /// graphics, sound, DMA, timers, etc.
     io: [u8; 0x3FF],
@@ -110,9 +116,9 @@ struct RawMemory {
 impl RawMemory {
     pub const fn new() -> RawMemory {
         RawMemory {
-            sysrom: [0; 0x3FF],
-            ewram: [0; 0x3FF],
-            iwram: [0; 0x7FF],
+            sysrom: [0; 0x3FFF],
+            ewram: [0; 0x3FFFF],
+            iwram: [0; 0x7FFF],
             io: [0; 0x3FF],
             pal: [0; 0x3FF],
             vram: [0; 0x17FFF],

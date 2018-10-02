@@ -19,7 +19,7 @@ use util;
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
 pub struct CPUWrapper {
-    cpu: CPU,
+    pub cpu: CPU,
     // since we only need to keep track of the last 3 elements
     // of the pipeline at a time (the latest fetched instruction, the latest
     // decoded instruction, and the next decoded instruction to execute), we
@@ -131,31 +131,31 @@ pub struct CPU {
     /// r13 is usually the stack pointer (to the top element of the stack, not
     /// the top element + 1), r14 is usually the link register,
     /// and r15 is the PC pointing to address + 8 of the current instruction
-    r: [u32; 16],
+    pub r: [u32; 16],
     /// R8-R14 are banked in FIQ mode
-    r_fiq: [u32; 7],
+    pub r_fiq: [u32; 7],
     /// R13-R14 are banked in IRQ mode
-    r_irq: [u32; 2],
+    pub r_irq: [u32; 2],
     /// R13-R14 are banked in UND mode
-    r_und: [u32; 2],
+    pub r_und: [u32; 2],
     /// R13-R14 are banked in ABT mode
-    r_abt: [u32; 2],
+    pub r_abt: [u32; 2],
     /// R13-R14 are banked in SVC mode
-    r_svc: [u32; 2],
+    pub r_svc: [u32; 2],
 
     /// program state registers
-    cpsr: PSR,
+    pub cpsr: PSR,
     /// banked SPSR registers
-    spsr_svc: PSR,
-    spsr_abt: PSR,
-    spsr_und: PSR,
-    spsr_irq: PSR,
-    spsr_fiq: PSR,
+    pub spsr_svc: PSR,
+    pub spsr_abt: PSR,
+    pub spsr_und: PSR,
+    pub spsr_irq: PSR,
+    pub spsr_fiq: PSR,
 
     // flush the pipeline before the start of the next cycle
     should_flush: bool,
 
-    mem: mem::Memory,
+    pub mem: mem::Memory,
 }
 
 impl CPU {
