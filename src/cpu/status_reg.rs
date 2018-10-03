@@ -4,7 +4,7 @@ use num::FromPrimitive;
 /// The 7 modes of operation of the ARM7TDMI processor, which is in user mode
 /// by default
 enum_from_primitive! {
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CPUMode {
     USR = 0b10000,
@@ -19,7 +19,10 @@ pub enum CPUMode {
     /// undefined mode is entered when an undefined instruction is executed
     UND = 0b11011,
     /// system mode is a privileged user mode for the OS
-    SYS = 0b11111
+    SYS = 0b11111,
+    /// it's possible that the SPSR gets set to an invalid mode temporarily
+    /// but then is fixed before getting restored to the CPSR
+    INVALID
 }
 }
 
@@ -89,15 +92,22 @@ impl PSR {
         (self.mode as u32)
     }
 
-    pub fn from_u32(&mut self, val: u32) {
+    pub fn from_u32(&mut self, val: u32, flag_only: bool) {
         self.neg = util::get_bit(val, 31);
         self.zero = util::get_bit(val, 30);
         self.carry = util::get_bit(val, 29);
         self.overflow = util::get_bit(val, 28);
-        self.irq = util::get_bit(val, 7);
-        self.fiq = util::get_bit(val, 6);
-        self.isa = if util::get_bit(val, 5) { InstructionSet::THUMB } else { InstructionSet::ARM };
-        self.mode = CPUMode::from_u32(val & 0b11111).unwrap();
+        if !flag_only {
+            self.irq = util::get_bit(val, 7);
+            self.fiq = util::get_bit(val, 6);
+            self.isa = if util::get_bit(val, 5) {
+                InstructionSet::THUMB
+            } else {
+                InstructionSet::ARM
+            };
+            self.mode = CPUMode::from_u32(val & 0b11111)
+                .unwrap_or(CPUMode::INVALID);
+        }
     }
 }
 

@@ -219,6 +219,7 @@ impl CPU {
                 CPUMode::UND => self.r_und[reg - 13],
                 CPUMode::ABT => self.r_abt[reg - 13],
                 CPUMode::SVC => self.r_svc[reg - 13],
+                CPUMode::INVALID => panic!("invalid mode"),
             },
             _ => panic!("tried to access register {}", reg)
         }
@@ -240,6 +241,7 @@ impl CPU {
                 CPUMode::UND => self.r_und[reg - 13] = val,
                 CPUMode::ABT => self.r_abt[reg - 13] = val,
                 CPUMode::SVC => self.r_svc[reg - 13] = val,
+                CPUMode::INVALID => panic!("invalid mode"),
             },
             _ => panic!("tried to set register {}", reg)
         };
@@ -314,8 +316,8 @@ impl CPU {
     }
 
     /// Set the CPSR
-    fn set_cpsr(&mut self, val: u32) {
-        self.cpsr.from_u32(val);
+    fn set_cpsr(&mut self, val: u32, flags_only: bool) {
+        self.cpsr.from_u32(val, flags_only);
     }
 
     /// Return the SPSR for the current mode
@@ -328,20 +330,22 @@ impl CPU {
             CPUMode::SVC => self.spsr_svc,
             CPUMode::ABT => self.spsr_abt,
             CPUMode::UND => self.spsr_und,
-            CPUMode::SYS => self.cpsr
+            CPUMode::SYS => self.cpsr,
+            CPUMode::INVALID => panic!("invalid mode"),
         }
     }
 
     /// Set the SPSR for the current mode
-    fn set_spsr(&mut self, val: u32) {
+    fn set_spsr(&mut self, val: u32, flags_only: bool) {
         match self.cpsr.mode {
             CPUMode::USR => panic!("USR mode has no SPSR"),
-            CPUMode::FIQ => self.spsr_fiq.from_u32(val),
-            CPUMode::IRQ => self.spsr_irq.from_u32(val),
-            CPUMode::SVC => self.spsr_svc.from_u32(val),
-            CPUMode::ABT => self.spsr_abt.from_u32(val),
-            CPUMode::UND => self.spsr_und.from_u32(val),
-            CPUMode::SYS => ()
+            CPUMode::FIQ => self.spsr_fiq.from_u32(val, flags_only),
+            CPUMode::IRQ => self.spsr_irq.from_u32(val, flags_only),
+            CPUMode::SVC => self.spsr_svc.from_u32(val, flags_only),
+            CPUMode::ABT => self.spsr_abt.from_u32(val, flags_only),
+            CPUMode::UND => self.spsr_und.from_u32(val, flags_only),
+            CPUMode::SYS => (),
+            CPUMode::INVALID => panic!("invalid mode"),
         }
     }
 
@@ -354,7 +358,8 @@ impl CPU {
             CPUMode::SVC => self.spsr_svc = self.cpsr,
             CPUMode::ABT => self.spsr_abt = self.cpsr,
             CPUMode::UND => self.spsr_und = self.cpsr,
-            CPUMode::SYS => unimplemented!()
+            CPUMode::SYS => unimplemented!(),
+            CPUMode::INVALID => panic!("invalid mode"),
         };
         self.cpsr.mode = new_mode;
     }

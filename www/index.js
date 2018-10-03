@@ -19,15 +19,29 @@ const parse_cpsr = (raw) => ({
     overflow: (raw >> 28) & 1 == 1,
     irq: (raw >> 7) & 1 == 1,
     thumb: (raw >> 5) & 1 == 1,
-    mode:
-        (raw & 0b11111) === 0b10000
-        ? "USR"
-        : (raw & 0b11111) === 0b10011
-        ? "SVC"
-        : (raw & 0b11111) === 0b11111
-        ? "SYS"
-        : "unknown",
+    mode: get_mode(raw & 0b11111),
 })
+
+const get_mode = (raw) => {
+    switch(raw) {
+        case 0b10000:
+            return "USR"
+        case 0b10001:
+            return "FIQ"
+        case 0b10010:
+            return "IRQ"
+        case 0b10011:
+            return "SVC"
+        case 0b10111:
+            return "ABT"
+        case 0b11011:
+            return "UND"
+        case 0b11111:
+            return "SYS"
+        default:
+            return raw.toString(2)
+    }
+}
 
 const get_flag = (on, char) => on ? char : '-'
 

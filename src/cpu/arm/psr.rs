@@ -1,5 +1,6 @@
 use super::RegOrImm;
 use ::cpu::CPU;
+use ::cpu::status_reg::CPUMode;
 use ::util;
 
 #[derive(Debug)]
@@ -13,7 +14,7 @@ pub enum StateRegType {
 #[derive(Debug)]
 pub enum TransferType {
     Read { stype: StateRegType, dest: usize },
-    Write { stype: StateRegType, source: RegOrImm }
+    Write { stype: StateRegType, source: RegOrImm, flag_only: bool }
 }
 
 /// These instructions are TEQ/TST/CMN/CMP Data Processing operations but
@@ -54,7 +55,8 @@ impl PSRTransfer {
                         }
                     } else {
                         RegOrImm::Reg { reg: util::get_byte(ins, 0), shift: 0 }
-                    }
+                    },
+                    flag_only: !util::get_bit(ins, 16),
                 }
             } else {
                 TransferType::Read { stype, dest: util::get_nibble(ins, 12) as usize }
@@ -74,8 +76,8 @@ impl PSRTransfer {
                 };
                 cpu.set_reg(dest, val);
             },
-            TransferType::Write { ref stype, ref source } => {
-                let val = match source {
+            TransferType::Write { ref stype, ref source, flag_only } => {
+                let mut val = match source {
                     RegOrImm::Imm { rotate, ref value } => value.rotate_right(*rotate),
                     RegOrImm::Reg { shift: _, reg } => {
                         if *reg == 15 {
@@ -85,8 +87,13 @@ impl PSRTransfer {
                     }
                 };
                 match stype {
-                    StateRegType::Current => cpu.set_cpsr(val),
-                    StateRegType::Saved => cpu.set_spsr(val)
+                    StateRegType::Current => {
+                        cpu.set_cpsr(val, flag_only);
+                        if let CPUMode::INVALID = cpu.cpsr.mode {
+                            panic!("setting CPSR to an invalid mode")
+                        }
+                    },
+                    StateRegType::Saved => cpu.set_spsr(val, flag_only)
                 }
             }
         }
@@ -115,10 +122,22 @@ mod test {
         assert!(match ins.trans {
             TransferType::Write {
                 stype: StateRegType::Saved,
-                source: RegOrImm::Reg { shift: 0, reg: 8 }
+                source: RegOrImm::Reg { shift: 0, reg: 8 },
+                flag_only: true,
             } => true,
             _ => false
-        })
+        });
+
+        let ins = PSRTransfer::parse_instruction(
+            0b0000_00010_1_1010011111_00000000_1000);
+        assert!(match ins.trans {
+            TransferType::Write {
+                stype: StateRegType::Saved,
+                source: RegOrImm::Reg { shift: 0, reg: 8 },
+                flag_only: false,
+            } => true,
+            _ => false
+        });
     }
 
     #[test]
@@ -128,7 +147,8 @@ mod test {
         assert!(match ins.trans {
             TransferType::Write {
                 stype: StateRegType::Current,
-                source: RegOrImm::Imm { rotate: 10, value: 128 }
+                source: RegOrImm::Imm { rotate: 10, value: 128 },
+                flag_only: true,
             } => true,
             _ => false
         });
@@ -148,6 +168,63 @@ mod test {
         ins.run(&mut cpu);
 
         assert_eq!(cpu.cpsr.to_u32(), cpu.get_reg(0));
+    }
+
+    #[test]
+    fn write_spsr_invalid() {
+        let mut cpu = CPU::new();
+        let ins = PSRTransfer {
+            trans: TransferType::Write {
+                stype: StateRegType::Saved,
+                source: RegOrImm::Reg { shift: 0, reg: 14 },
+                flag_only: false
+            }
+        };
+        ins.run(&mut cpu);
+        let spsr = cpu.get_spsr();
+        assert_eq!(spsr.neg, false);
+        assert_eq!(spsr.zero, false);
+        assert_eq!(spsr.carry, false);
+        assert_eq!(spsr.overflow, false);
+        assert_eq!(spsr.irq, false);
+        assert_eq!(spsr.fiq, false);
+        assert_eq!(spsr.isa, InstructionSet::ARM);
+        assert_eq!(spsr.mode, CPUMode::INVALID);
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_cpsr_invalid() {
+        let mut cpu = CPU::new();
+        let ins = PSRTransfer {
+            trans: TransferType::Write {
+                stype: StateRegType::Current,
+                source: RegOrImm::Reg { shift: 0, reg: 14 },
+                flag_only: false
+            }
+        };
+        ins.run(&mut cpu);
+    }
+
+    #[test]
+    fn write_flagonly() {
+        let mut cpu = CPU::new();
+        let ins = PSRTransfer {
+            trans: TransferType::Write {
+                stype: StateRegType::Current,
+                source: RegOrImm::Imm { rotate: 0, value: 0xFFFFFFFF },
+                flag_only: true
+            }
+        };
+        ins.run(&mut cpu);
+        assert_eq!(cpu.cpsr.neg, true);
+        assert_eq!(cpu.cpsr.zero, true);
+        assert_eq!(cpu.cpsr.carry, true);
+        assert_eq!(cpu.cpsr.overflow, true);
+        assert_eq!(cpu.cpsr.irq, true);
+        assert_eq!(cpu.cpsr.fiq, true);
+        assert_eq!(cpu.cpsr.isa, InstructionSet::ARM);
+        assert_eq!(cpu.cpsr.mode, CPUMode::SVC);
     }
 
     #[test]
