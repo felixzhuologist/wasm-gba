@@ -9,9 +9,7 @@ const { memory } = await wasm;
 const armd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_ARM);
 const thumd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
 
-let reg_ptr = VM.get_registers() / 4;
 let bios_ptr = VM.get_bios();
-let buf32 = new Uint32Array(memory.buffer);
 let buf8 = new Uint8Array(memory.buffer);
 
 const parse_cpsr = (raw) => ({
@@ -26,15 +24,15 @@ const parse_cpsr = (raw) => ({
         ? "USR"
         : (raw & 0b11111) === 0b10011
         ? "SVC"
+        : (raw & 0b11111) === 0b11111
+        ? "SYS"
         : "unknown",
 })
 
 const get_flag = (on, char) => on ? char : '-'
 
 const update_shared_mem = () => {
-    reg_ptr = VM.get_registers() / 4;
     bios_ptr = VM.get_bios();
-    buf32 = new Uint32Array(memory.buffer);
     buf8 = new Uint8Array(memory.buffer);
 }
 
@@ -65,7 +63,7 @@ const dumpState = () => {
     $("#regs").empty();
     for (let i = 0; i < 16; i++) {
         $("#regs").append(
-            `<div class="col-md-3">R${i}: ${buf32[reg_ptr + i].toString(16)}</div>`);
+            `<div class="col-md-3">R${i}: ${VM.get_register(i).toString(16)}</div>`);
     }
 
     $("#pipeline").empty();
@@ -81,7 +79,7 @@ const dumpState = () => {
             ${cpsr.mode}
         </div>`);
 
-    let pc = buf32[reg_ptr + 15];
+    let pc = VM.get_register(15);
     let start = Math.max(0, pc - 8);
     let end = pc + 4;
     let pipeline = armd.disasm(

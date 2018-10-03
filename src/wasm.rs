@@ -12,8 +12,8 @@ pub fn upload_rom(data: &[u8]) {
 }
 
 #[wasm_bindgen]
-pub fn get_registers() -> *const u8 {
-    unsafe { &GBA.cpu.r as *const u32 as *const u8 }
+pub fn get_register(i: usize) -> u32 {
+    unsafe { GBA.cpu.get_reg(i) }
 }
 
 #[wasm_bindgen]
