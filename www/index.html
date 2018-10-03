@@ -16,7 +16,13 @@
     <script src="./capstone-arm.min.js"></script>
     <script src="./index.js"></script>
     <input id="bios" type="file" />
+
+    <input type="submit" value="run" id="bpsubmit">
+    <label for="breakpoint">Set breakpoint:</label>
+    <input type="text" name="breakpoint" id="bpinput"><br>
+
     <button id="step">step</button>
+
     <div class="container">
         <div class="row" id="regs">
         </div>

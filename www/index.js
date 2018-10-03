@@ -57,6 +57,11 @@ const addBiosListener = () => {
 const addDebugListener = () => {
     const stepButton = document.getElementById('step');
     stepButton.addEventListener("click", event => step());
+    const runButton = document.getElementById('bpsubmit')
+    runButton.addEventListener("click", event => {
+        let bp = parseInt(document.getElementById('bpinput').value, 16);
+        run_until_break(bp);
+    })
 }
 
 const dumpState = () => {
@@ -100,6 +105,12 @@ const dumpState = () => {
 const step = () => {
     VM.step();
     dumpState();
+}
+
+const run_until_break = (breakpoint) => {
+    while (VM.get_register(15) !== breakpoint) {
+        step();
+    }
 }
 
 addBiosListener();
