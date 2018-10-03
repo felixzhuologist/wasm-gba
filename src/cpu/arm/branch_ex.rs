@@ -19,10 +19,13 @@ impl BranchAndExchange {
     }
 
     pub fn run(&self, cpu: &mut CPU) {
-        let switch_to_thumb = util::get_bit(self.reg as u32, 0);
+        let mut val = cpu.get_reg(self.reg);
+        let switch_to_thumb = util::get_bit(val, 0);
         cpu.set_isa(switch_to_thumb);
-        let jump_dest = cpu.get_reg(self.reg);
-        cpu.set_reg(15, jump_dest);
+        if switch_to_thumb { // halfword align the next addr
+            val &= !1;
+        }
+        cpu.set_reg(15, val);
         cpu.should_flush = true;
     }
 }
@@ -47,7 +50,7 @@ mod test {
         let ins = BranchAndExchange { reg: 3 };
         ins.run(&mut cpu);
 
-        assert_eq!(cpu.get_reg(15), 0x1123);
+        assert_eq!(cpu.get_reg(15), 0x1122);
         assert_eq!(cpu.cpsr.isa, InstructionSet::THUMB);
         assert!(cpu.should_flush);
     }

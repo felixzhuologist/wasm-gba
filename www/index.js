@@ -7,7 +7,8 @@ const VM = await rust;
 const { memory } = await wasm;
 
 const armd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_ARM);
-const thumd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
+const thumbd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
+let dis = armd;
 
 let bios_ptr = VM.get_bios();
 let buf8 = new Uint8Array(memory.buffer);
@@ -82,7 +83,8 @@ const dumpState = () => {
     $("#regs").empty();
     for (let i = 0; i < 16; i++) {
         $("#regs").append(
-            `<div class="col-md-3">R${i}: ${VM.get_register(i).toString(16)}</div>`);
+            // >>> "coerces" to an unsigned integer
+            `<div class="col-md-3">R${i}: ${(VM.get_register(i) >>> 0).toString(16)}</div>`);
     }
 
     $("#pipeline").empty();
@@ -99,9 +101,10 @@ const dumpState = () => {
         </div>`);
 
     let pc = VM.get_register(15);
-    let start = Math.max(0, pc - 8);
-    let end = pc + 4;
-    let pipeline = armd.disasm(
+    let instr_size = dis === armd ? 4 : 2;
+    let start = Math.max(0, pc - 2*instr_size);
+    let end = pc + instr_size;
+    let pipeline = dis.disasm(
         buf8.slice(bios_ptr + start, bios_ptr + end),
         start);
     pipeline.forEach((instr) => {
@@ -118,6 +121,7 @@ const dumpState = () => {
 
 const step = () => {
     VM.step();
+    dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
 }
 
