@@ -451,14 +451,22 @@ mod test {
     #[test]
     fn mov() {
         let mut cpu = CPU::new();
-        let ins = DataProc {
+        DataProc {
             opcode: Op::MOV,
             set_flags: false,
             rn: 0,
             rd: 12,
             op2: RegOrImm::Imm { rotate: 3, value: 1 }
-        };
-        ins.run(&mut cpu);
+        }.run(&mut cpu);
         assert_eq!(cpu.get_reg(12), 0x4000000);
+
+        DataProc {
+            opcode: Op::MOV,
+            set_flags: false,
+            rn: 0,
+            rd: 14,
+            op2: RegOrImm::Imm { rotate: 0, value: 4 }
+        }.run(&mut cpu);
+        assert_eq!(cpu.get_reg(14), 4);
     }
 }

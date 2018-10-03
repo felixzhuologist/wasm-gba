@@ -40,7 +40,7 @@ pub enum PipelineInstruction {
     /// A fetched THUMB instruction
     RawTHUMB(u16),
     /// A decoded instruction
-    Decoded(Instruction)
+    Decoded(Option<u32>, Instruction)
 }
 
 pub fn decode_arm(ins: u32) -> Option<Instruction> {
@@ -147,7 +147,6 @@ pub enum Instruction {
     SWInterrupt(swi::SWInterrupt),
     CondBranch(thumb::CondBranch),
     LongBranch(thumb::LongBranch),
-    Noop
 }
 
 /// Return whether the current state of the CPU's flags matches the given condition

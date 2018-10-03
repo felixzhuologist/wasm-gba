@@ -84,25 +84,20 @@ impl CPUWrapper {
         }
     }
 
-    /// decode the next instruction. if the condition of the instruction isn't met,
-    /// the raw instruction is decoded as a Noop
+    /// decode the next instruction and save the condition (if any) in the Decoded
+    /// enum so that execute() can check if it is satisfied later
     pub fn decode(&mut self) {
         // index of the second element from the end
         let idx = ((self.idx + 2) % 3) as usize;
         match self.pipeline[idx] {
             PipelineInstruction::RawARM(n) => {
                 let cond = util::get_nibble(n, 28);
-                log!("{:#X?}", decode_arm(n).unwrap());
                 self.pipeline[idx] = PipelineInstruction::Decoded(
-                    if satisfies_cond(&self.cpu.cpsr, cond) {
-                        decode_arm(n).unwrap()
-                    } else {
-                        Instruction::Noop
-                    })
+                    Some(cond), decode_arm(n).unwrap());
             },
             PipelineInstruction::RawTHUMB(n) => {
                 self.pipeline[idx] =
-                    PipelineInstruction::Decoded(decode_thumb(n))
+                    PipelineInstruction::Decoded(None, decode_thumb(n))
             },
             _ => ()
         }
@@ -111,7 +106,11 @@ impl CPUWrapper {
     pub fn execute(&mut self) {
         // index of the third element from the end
         let idx = ((self.idx + 1) % 3) as usize;
-        if let PipelineInstruction::Decoded(ref ins) = self.pipeline[idx] {
+        if let PipelineInstruction::Decoded(cond, ref ins) = self.pipeline[idx] {
+            log!("{:#X?}", ins);
+            if cond.is_some() && !satisfies_cond(&self.cpu.cpsr, cond.unwrap()) {
+                return;
+            }
             match ins {
                 Instruction::DataProc(ins) => ins.run(&mut self.cpu),
                 Instruction::PSRTransfer(ins) => ins.run(&mut self.cpu),
@@ -126,7 +125,6 @@ impl CPUWrapper {
                 Instruction::SWInterrupt(ins) => ins.run(&mut self.cpu),
                 Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
                 Instruction::LongBranch(ins) => ins.run(&mut self.cpu),
-                Instruction::Noop => (),
             }
         }
     }
