@@ -254,7 +254,7 @@ impl CPU {
         let offset = self.get_offset(&params.offset);
         // word align the PC in THUMB mode if using as offset
         if self.cpsr.isa == InstructionSet::THUMB && params.base_reg == 15 {
-            addr &= !2;
+            addr &= !3;
         }
         if params.pre_index {
             // It seems like addition on the CPU automatically overflows

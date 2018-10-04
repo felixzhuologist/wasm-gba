@@ -109,7 +109,7 @@ impl Memory {
 
     pub fn update_int_word(&mut self, addr: u32, val: u32) {
         self.update_int_hw(addr, val);
-        self.update_int_hw(addr + 1, val >> 16);
+        self.update_int_hw(addr + 2, val >> 16);
     }
 }
 

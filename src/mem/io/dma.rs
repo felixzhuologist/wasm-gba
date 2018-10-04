@@ -92,7 +92,7 @@ impl Memory {
 
     pub fn update_dma_word(&mut self, addr: u32, val: u32) {
         self.update_dma_hw(addr, val);
-        self.update_dma_hw(addr + 1, val >> 16);
+        self.update_dma_hw(addr + 2, val >> 16);
     }
 
     pub fn check_dma(&mut self) {

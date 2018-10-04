@@ -133,12 +133,12 @@ impl Memory {
                     graphics.bg_cnt[bg].tile_addr =
                         0x6000000 + ((val >> 2) as u32 & 3)*0x4000;
                     graphics.bg_cnt[bg].mosaic_enabled = (val & 0x40) == 0x40;
-                    graphics.bg_cnt[bg].depth = if val >= 8 { 8 } else { 4 };
+                    graphics.bg_cnt[bg].depth = if val >= 128 { 8 } else { 4 };
                 }
             },
             BG_OFFSET_START...BG_OFFSET_END => {
                 let bg = ((addr - BG_OFFSET_START) / 4) as usize;
-                if (addr & 0x20) == 0 { // horizontal coord
+                if (addr & 2) == 0 { // horizontal coord
                     if (addr % 2) == 0 { // low byte
                         graphics.bg_offset_x[bg] &= 0xFF00;
                         graphics.bg_offset_x[bg] |= val as u16;
@@ -157,16 +157,16 @@ impl Memory {
                 }
             },
             BG_AFFINE_START...BG_AFFINE_END => {
-                let bg = ((addr - BG_AFFINE_START) / 10) as usize;
+                let bg = ((addr - BG_AFFINE_START) / 16) as usize;
                 let hw_raw = self.raw.get_halfword(addr & !1);
-                let word_raw = self.raw.get_word(addr & !1);
+                let word_raw = self.raw.get_word(addr & !3);
                 match addr % 16 {
                     0...1 => graphics.bg_affine[bg].dx = to_float_hw(hw_raw),
                     2...3 => graphics.bg_affine[bg].dmx = to_float_hw(hw_raw),
                     4...5 => graphics.bg_affine[bg].dy = to_float_hw(hw_raw),
                     6...7 => graphics.bg_affine[bg].dmy = to_float_hw(hw_raw),
-                    8...12 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
-                    13...15 => graphics.bg_affine[bg].ref_y = to_float_word(word_raw),
+                    8...11 => graphics.bg_affine[bg].ref_x = to_float_word(word_raw),
+                    12...15 => graphics.bg_affine[bg].ref_y = to_float_word(word_raw),
                     _ => panic!("should not get here")
                 }
             },
@@ -186,7 +186,7 @@ impl Memory {
                 let bg = ((addr >> 1) & 1) as usize;
                 let mut coords = &mut graphics.window_coords[bg];
                 // TODO: this is done differently in GBE?
-                if coords.left < coords.right {
+                if coords.left > coords.right {
                     coords.right = 240;
                 }
                 if coords.bottom < coords.top {
@@ -247,7 +247,7 @@ impl Memory {
 
     pub fn update_graphics_word(&mut self, addr: u32, val: u32) {
         self.update_graphics_hw(addr, val);
-        self.update_graphics_hw(addr + 1, val >> 16);
+        self.update_graphics_hw(addr + 2, val >> 16);
     }
 }
 
@@ -259,7 +259,6 @@ impl Memory {
 /// 3   (C) = Game Boy Color mode. Read only - should stay at 0. 
 /// D   (U) = Enable Window 0
 /// E   (V) = Enable Window 1 
-/// F   (W) = Enable Sprite Windows
 struct DispCnt {
     /// 0-2 (M) = The video mode
     bg_mode: u8,
@@ -285,6 +284,7 @@ struct DispCnt {
     // oam_enabled: bool,
     /// D-E (U) = enable the display of window i
     window_enabled: [bool; 2],
+    /// F   (W) = Enable Sprite Windows
     obj_win_enabled: bool,
 }
 
@@ -349,6 +349,7 @@ struct BgCnt {
     ///           appearing in front.
     priority: u8,
     /// 2-3 (S) = Starting address of character tile data
+    ///           Address = 0x6000000 + S * 0x4000
     tile_addr: u32,
     /// 6   (C) = Mosiac effect - 1 on, 0 off
     mosaic_enabled: bool,
@@ -472,6 +473,7 @@ impl BlendParams {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum BlendType {
     Off,
     AlphaBlend,
@@ -498,8 +500,10 @@ fn to_float_hw(raw: u16) -> f32 {
 /// 8-26 (I) - Integer 
 /// 27   (S) - Sign bit 
 fn to_float_word(raw: u32) -> f32 {
-    let mut int = (raw >> 8) & 0x7FFFF; // set I bits
-    int |= (raw << 4) & 0x80000000; // set sign bit
+    let mut int = (raw >> 8) & 0xFFFFF;
+    if ((raw >> 27) & 1) == 1 {
+        int |= 0xFFF0_0000; // sign extend
+    }
     let frac = ((raw & 0xFF) as f32) / 256.0;
     (int as i32 as f32) + frac
 }
@@ -507,4 +511,201 @@ fn to_float_word(raw: u32) -> f32 {
 /// takes a 5 bit value and parses it as an effect coefficent
 fn to_coeff(raw: u8) -> f32 {
     (min(raw, 16) as f32) / 16.0
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn write() {
+        let mut mem = Memory::new();
+
+        mem.set_halfword(0x4000000,
+            0b1011_1001_0101_1010);
+        {
+            let disp_cnt = &mem.graphics.disp_cnt;
+            assert_eq!(disp_cnt.bg_mode, 2);
+            assert_eq!(disp_cnt.frame_base, 0x600A000);
+            assert_eq!(disp_cnt.hblank_interval_free, false);
+            assert_eq!(disp_cnt.bg_enabled[0], true);
+            assert_eq!(disp_cnt.bg_enabled[1], false);
+            assert_eq!(disp_cnt.bg_enabled[2], false);
+            assert_eq!(disp_cnt.bg_enabled[3], true);
+            assert_eq!(disp_cnt.window_enabled[0], true);
+            assert_eq!(disp_cnt.window_enabled[1], false);
+            assert_eq!(disp_cnt.obj_win_enabled, true);
+        }
+
+        mem.set_halfword(0x4000004,
+            0b0000_1111_0010_1111);
+        {
+            let disp_stat = &mem.graphics.disp_stat;
+            assert_eq!(disp_stat.is_vblank, false);
+            assert_eq!(disp_stat.is_hblank, false);
+            assert_eq!(disp_stat.vcount_triggered, false);
+            assert_eq!(disp_stat.vblank_irq_enabled, true);
+            assert_eq!(disp_stat.hblank_irq_enabled, false);
+            assert_eq!(disp_stat.vcount_irq_enabled, true);
+            assert_eq!(disp_stat.vcount_line_trigger, 15);
+        }
+
+        mem.set_halfword(0x4000008,
+            0b1100_0010_1000_1111);
+        {
+            let bgcnt = &mem.graphics.bg_cnt[0];
+            assert_eq!(bgcnt.priority, 3);
+            assert_eq!(bgcnt.tile_addr, 0x600c000);
+            assert_eq!(bgcnt.mosaic_enabled, false);
+            assert_eq!(bgcnt.depth, 8);
+            assert_eq!(bgcnt.map_addr, 0x6001000);
+            assert_eq!(bgcnt.overflow, false);
+            assert_eq!(bgcnt.width, 512);
+            assert_eq!(bgcnt.height, 512);
+        }
+
+        mem.set_halfword(0x400000E,
+            0b0100_0000_0111_0100);
+        {
+            let bgcnt = &mem.graphics.bg_cnt[3];
+            assert_eq!(bgcnt.priority, 0);
+            assert_eq!(bgcnt.tile_addr, 0x6004000);
+            assert_eq!(bgcnt.mosaic_enabled, true);
+            assert_eq!(bgcnt.depth, 4);
+            assert_eq!(bgcnt.map_addr, 0x6000000);
+            assert_eq!(bgcnt.overflow, false);
+            assert_eq!(bgcnt.width, 512);
+            assert_eq!(bgcnt.height, 256);   
+        }
+
+        mem.set_halfword(0x4000010, 0x03AB);
+        assert_eq!(mem.graphics.bg_offset_x[0], 0x03AB);
+        mem.set_halfword(0x4000016, 0xFFFF);
+        assert_eq!(mem.graphics.bg_offset_y[1], 0x03FF);
+        mem.set_halfword(0x4000018, 0x0123);
+        assert_eq!(mem.graphics.bg_offset_x[2], 0x0123);
+        mem.set_halfword(0x400001E, 0x0010);
+        assert_eq!(mem.graphics.bg_offset_y[3], 0x0010);
+
+        mem.set_halfword(0x4000020, 0x0A00);
+        assert_eq!(mem.graphics.bg_affine[0].dx, 10.0);
+        mem.set_halfword(0x4000030, 0xFF00);
+        assert_eq!(mem.graphics.bg_affine[1].dx, -1.0);
+        mem.set_halfword(0x4000022, 0x0100);
+        assert_eq!(mem.graphics.bg_affine[0].dmx, 1.0);
+        assert_eq!(mem.graphics.bg_affine[1].dmx, 0.0);
+        mem.set_halfword(0x4000034, 0x0900);
+        assert_eq!(mem.graphics.bg_affine[0].dy, 0.0);
+        assert_eq!(mem.graphics.bg_affine[1].dy, 9.0);
+        mem.set_halfword(0x4000026, 0x0180);
+        assert_eq!(mem.graphics.bg_affine[0].dmy, 1.5);
+        assert_eq!(mem.graphics.bg_affine[1].dmy, 0.0);
+
+        mem.set_word(0x4000038, 0x00_0007_00);
+        assert_eq!(mem.graphics.bg_affine[0].ref_x, 0.0);
+        assert_eq!(mem.graphics.bg_affine[1].ref_x, 7.0);
+        mem.set_word(0x400002C, 0x00_0003_40);
+        assert_eq!(mem.graphics.bg_affine[0].ref_y, 3.25);
+        assert_eq!(mem.graphics.bg_affine[1].ref_y, 0.0);
+
+        mem.set_halfword(0x4000040, 0xABCD);
+        mem.set_halfword(0x4000042, 0x1234);
+        mem.set_halfword(0x4000044, 0x5678);
+        mem.set_halfword(0x4000046, 0x89EF);
+        {
+            let coords = &mem.graphics.window_coords;
+            assert_eq!(coords[0].left, 0xAB);
+            assert_eq!(coords[0].right, 0xCD);
+            assert_eq!(coords[0].top, 0x56);
+            assert_eq!(coords[0].bottom, 0x78);
+
+            assert_eq!(coords[1].left, 0x12);
+            assert_eq!(coords[1].right, 0x34); //
+            assert_eq!(coords[1].top, 0x89);
+            assert_eq!(coords[1].bottom, 160);
+        }
+
+        mem.set_word(0x4000048,
+            0b00101110_00010011_11111111_1100_1010);
+        {
+            let settings = &mem.graphics.window_settings;
+            assert_eq!(settings[3].bg[0], false);
+            assert_eq!(settings[3].bg[1], true);
+            assert_eq!(settings[3].bg[2], true);
+            assert_eq!(settings[3].bg[3], true);
+            assert_eq!(settings[3].sprite, false);
+            assert_eq!(settings[3].blend, true);
+
+            assert_eq!(settings[2].bg[0], true);
+            assert_eq!(settings[2].bg[1], true);
+            assert_eq!(settings[2].bg[2], false);
+            assert_eq!(settings[2].bg[3], false);
+            assert_eq!(settings[2].sprite, true);
+            assert_eq!(settings[2].blend, false);
+
+            assert_eq!(settings[1].bg[0], true);
+            assert_eq!(settings[1].bg[1], true);
+            assert_eq!(settings[1].bg[2], true);
+            assert_eq!(settings[1].bg[3], true);
+            assert_eq!(settings[1].sprite, true);
+            assert_eq!(settings[1].blend, true);
+
+            assert_eq!(settings[0].bg[0], false);
+            assert_eq!(settings[0].bg[1], true);
+            assert_eq!(settings[0].bg[2], false);
+            assert_eq!(settings[0].bg[3], true);
+            assert_eq!(settings[0].sprite, false);
+            assert_eq!(settings[0].blend, false);
+        }
+
+        mem.set_halfword(0x400004C, 0x1234);
+        assert_eq!(mem.graphics.bg_mos_hsize, 4);
+        assert_eq!(mem.graphics.bg_mos_vsize, 3);
+        assert_eq!(mem.graphics.obj_mos_hsize, 2);
+        assert_eq!(mem.graphics.obj_mos_vsize, 1);
+
+        mem.set_halfword(0x4000050, 0b00_101100_01_001101);
+        {
+            let params = &mem.graphics.blend_params;
+            assert_eq!(params.source[0], true);
+            assert_eq!(params.source[1], false);
+            assert_eq!(params.source[2], true);
+            assert_eq!(params.source[3], true);
+            assert_eq!(params.source[4], false);
+            assert_eq!(params.source[5], false);
+            assert_eq!(params.mode, BlendType::AlphaBlend);
+            assert_eq!(params.target[0], false);
+            assert_eq!(params.target[1], false);
+            assert_eq!(params.target[2], true);
+            assert_eq!(params.target[3], true);
+            assert_eq!(params.target[4], false);
+            assert_eq!(params.target[5], true);
+        }
+
+        mem.set_halfword(0x4000052, 0b000_01000_000_10000);
+        assert_eq!(mem.graphics.alpha_a_coef, 1.0);
+        assert_eq!(mem.graphics.alpha_b_coef, 0.5);
+
+        mem.set_byte(0x4000054, 0b000_11000);
+        assert_eq!(mem.graphics.brightness_coef, 1.0);
+    }
+
+    #[test]
+    fn parse_float() {
+        assert_eq!(to_float_hw(0x0A00), 10.0);
+        assert_eq!(to_float_hw(0xFF00), -1.0);
+        assert_eq!(to_float_hw(0x0180), 1.5);
+
+        assert_eq!(to_float_word(0x00_000A_00), 10.0);
+        assert_eq!(to_float_word(0xFF_FFFF_00), -1.0);
+        assert_eq!(to_float_word(0x00_0002_80), 2.5);
+    }
+
+    #[test]
+    fn parse_coeff() {
+        assert_eq!(to_coeff(8), 0.5);
+        assert_eq!(to_coeff(4), 0.25);
+        assert_eq!(to_coeff(0), 0.0);
+        assert_eq!(to_coeff(30), 1.0);
+    }
 }
