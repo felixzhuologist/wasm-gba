@@ -451,7 +451,7 @@ impl LongBranch {
             cpu.set_reg(14, upper as u32);
         } else {
             let next_ins = (cpu.get_reg(15) - 2) | 1;
-            let pc = cpu.get_reg(14) + ((self.offset as u32) << 1);
+            let pc = cpu.get_reg(14).wrapping_add((self.offset as u32) << 1);
             cpu.set_reg(14, next_ins);
             cpu.set_reg(15, pc & !1);
             cpu.should_flush = true;

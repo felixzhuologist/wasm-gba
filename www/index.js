@@ -131,13 +131,17 @@ const step = () => {
 
 const run_until_break = (breakpoint) => {
     let steps = 0;
-    while (VM.get_register(15) !== breakpoint) {
-        if (steps > 1000) { // don't hang indefinitely
+    let started = false;
+    while (!started || (VM.get_register(15) !== breakpoint)) {
+        started = true;
+        if (steps > 10000) { // don't hang indefinitely
             break;
         }
-        step();
+        VM.step();
+        dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
         steps += 1;
     }
+    dumpState();
 }
 
 addBiosListener();

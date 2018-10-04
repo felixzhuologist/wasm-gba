@@ -15,18 +15,6 @@ use self::pipeline::{
 };
 use mem;
 use util;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(msg: &str);
-}
-
-// A macro to provide `println!(..)`-style syntax for `console.log` logging.
-macro_rules! log {
-    ($($t:tt)*) => (log(&format!($($t)*)))
-}
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
@@ -107,7 +95,6 @@ impl CPUWrapper {
         // index of the third element from the end
         let idx = ((self.idx + 1) % 3) as usize;
         if let PipelineInstruction::Decoded(cond, ref ins) = self.pipeline[idx] {
-            log!("{:#X?}", ins);
             if cond.is_some() && !satisfies_cond(&self.cpu.cpsr, cond.unwrap()) {
                 return;
             }
@@ -199,7 +186,7 @@ impl CPU {
     /// Add a signed offset to the PC
     pub fn modify_pc(&mut self, offset: i64) {
         // cast pc to i64 to avoid interpreting it as negative number
-        self.r[15] = (self.r[15] as i64 + offset as i64) as u32;
+        self.r[15] = (self.r[15] as i64).wrapping_add(offset as i64) as u32;
         self.should_flush = true;
     }
 

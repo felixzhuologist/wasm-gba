@@ -1,5 +1,5 @@
 use ::cpu::CPU;
-use ::cpu::status_reg::CPUMode;
+use ::cpu::status_reg::{CPUMode, InstructionSet};
 use ::util;
 
 /// Load or store any subset of the currently visible registers
@@ -116,6 +116,11 @@ impl BlockDataTransfer {
         }
         if force_user_bank {
             cpu.cpsr.mode = original_mode;
+        }
+        let pc = cpu.get_reg(15);
+        if is_pc_in_list && (pc & 1) == 1 {
+            cpu.cpsr.isa = InstructionSet::THUMB;
+            cpu.set_reg(15, pc & !1);
         }
     }
 }
