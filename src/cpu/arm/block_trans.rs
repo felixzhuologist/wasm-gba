@@ -65,7 +65,6 @@ impl BlockDataTransfer {
             cpu.should_flush = true;
         }
 
-        let first_reg = 0;
         let mut addr = cpu.get_reg(self.rn);
         let mut write_back = self.write_back;
         // start from larger regs if we are descending - this doesn't emulate
@@ -74,6 +73,7 @@ impl BlockDataTransfer {
         // address and we check for that case explicitly (4.11.6 in the ARM7TDMI
         // data sheet)
         let bits = if self.offset_up { self.register_list } else { self.register_list.reverse_bits() };
+        let mut is_first = true;
         for i in 0..16 {
             if bits & (1 << i) > 0 {
                 if self.pre_index {
@@ -90,7 +90,7 @@ impl BlockDataTransfer {
                     let memval = cpu.mem.get_word(addr);
                     cpu.set_reg(reg, memval);
                 } else {
-                    if reg == self.rn && !reg == first_reg {
+                    if reg == self.rn && !is_first {
                         // if we are storing the base register and this isn't
                         // the first register we are storing, store the updated
                         // value for the base register
@@ -98,7 +98,7 @@ impl BlockDataTransfer {
                         // (they write back at the end of each loop)
                         cpu.mem.set_word(addr, addr);
                     } else {
-                        let regval = cpu.get_reg(i);
+                        let regval = cpu.get_reg(reg);
                         cpu.mem.set_word(addr, regval);
                     }
                 }
@@ -106,6 +106,8 @@ impl BlockDataTransfer {
                 if !self.pre_index {
                     addr = if self.offset_up { addr + 4 } else { addr - 4 };
                 }
+
+                is_first = false;
             }
         }
 
@@ -183,6 +185,46 @@ mod test {
         assert_eq!(cpu.get_reg(5), 0x321);
         assert_eq!(cpu.get_reg(7), 0xABC);
         assert_eq!(cpu.get_reg(0), 0x0300000C);
+
+        let mut cpu = CPU::new();
+        cpu.set_reg(0, 0x3007EA0);
+        cpu.set_reg(1, 0x4000220);
+        cpu.set_reg(10, 0x4000220);
+        cpu.set_reg(12, 0x3007EC0);
+        cpu.set_reg(13, 0x3007E80);
+        cpu.set_reg(14, 0xBD4);
+        cpu.set_reg(15, 0xC28);
+
+        cpu.mem.set_word(0x3007E80, 0x40_00_00_00);
+        cpu.mem.set_word(0x3007E84, 0x85_00_00_00);
+        cpu.mem.set_word(0x3007E88, 0x00_00_00_80);
+        cpu.mem.set_word(0x3007E8C, 0x00_00_00_FF);
+        cpu.mem.set_word(0x3007E90, 0x00_00_00_00);
+        cpu.mem.set_word(0x3007E94, 0x00_00_00_00);
+        cpu.mem.set_word(0x3007E98, 0x00_00_00_00);
+        cpu.mem.set_word(0x3007E9C, 0x00_00_09_E7);
+
+        // ldmia sp!, {r4-r10,lr}
+        BlockDataTransfer {
+            pre_index: false,
+            offset_up: true,
+            force: false,
+            write_back: true,
+            load: true,
+            rn: 13,
+            register_list: 0x47F0
+        }.run(&mut cpu);
+
+        assert_eq!(cpu.get_reg(0), 0x3007EA0);
+        assert_eq!(cpu.get_reg(1), 0x4000220);
+        assert_eq!(cpu.get_reg(4), 0x40_00_00_00);
+        assert_eq!(cpu.get_reg(5), 0x85_00_00_00);
+        assert_eq!(cpu.get_reg(6), 0x00_00_00_80);
+        assert_eq!(cpu.get_reg(7), 0x00_00_00_FF);
+        assert_eq!(cpu.get_reg(8), 0x00_00_00_00);
+        assert_eq!(cpu.get_reg(9), 0x00_00_00_00);
+        assert_eq!(cpu.get_reg(10), 0x00_00_00_00);
+        assert_eq!(cpu.get_reg(14), 0x00_00_09_E7);
     }
 
     #[test]
@@ -208,6 +250,43 @@ mod test {
         assert_eq!(cpu.get_reg(11), 0x321);
         assert_eq!(cpu.get_reg(10), 0xABC);
         assert_eq!(cpu.get_reg(0), 0x03000000);
+    }
+
+    #[test]
+    fn pre_incr_down_store() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(0, 0x3007EA0);
+        cpu.set_reg(1, 0x4000200);
+        cpu.set_reg(2, 0x85000008);
+        cpu.set_reg(3, 0xBC4);
+        cpu.set_reg(4, 0x4000000);
+        cpu.set_reg(5, 0x85000000);
+        cpu.set_reg(6, 0x80);
+        cpu.set_reg(7, 0xFF);
+        cpu.set_reg(13, 0x3007EA0);
+        cpu.set_reg(14, 0x9E7);
+        cpu.set_reg(15, 0xBD0);
+
+        // stmdb sp!, {r4-r10,lr}
+        let ins = BlockDataTransfer {
+            pre_index: true,
+            offset_up: false,
+            force: false,
+            write_back: true,
+            load: false,
+            rn: 13,
+            register_list: 0x47F0
+        };
+        ins.run(&mut cpu);
+
+        assert_eq!(cpu.mem.get_word(0x3007E80), 0x4000000);
+        assert_eq!(cpu.mem.get_word(0x3007E84), 0x85000000);
+        assert_eq!(cpu.mem.get_word(0x3007E88), 0x80);
+        assert_eq!(cpu.mem.get_word(0x3007E8C), 0xFF);
+        assert_eq!(cpu.mem.get_word(0x3007E90), 0);
+        assert_eq!(cpu.mem.get_word(0x3007E94), 0);
+        assert_eq!(cpu.mem.get_word(0x3007E98), 0);
+        assert_eq!(cpu.mem.get_word(0x3007E9C), 0x9E7);
     }
 
     #[test]

@@ -257,7 +257,12 @@ impl CPU {
             addr &= !2;
         }
         if params.pre_index {
-            addr = if params.offset_up { addr + offset } else { addr - offset };
+            // It seems like addition on the CPU automatically overflows
+            addr = if params.offset_up {
+                addr.wrapping_add(offset)
+            } else {
+                addr.wrapping_sub(offset)
+            };
         }
 
         // transfer
@@ -482,6 +487,24 @@ mod test {
             offset: &RegOrImm::Imm { rotate: 0, value: 20 }
         });
         assert_eq!(cpu.get_reg(1), 77);
+    }
+
+    #[test]
+    fn transfer_store() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(1, 0xFFFF_FE00);
+        cpu.set_reg(4, 0x0400_0000);
+        cpu.transfer_reg(TransferParams {
+            pre_index: true,
+            offset_up: true,
+            size: TransferSize::Word,
+            write_back: false,
+            load: false,
+            base_reg: 4,
+            data_reg: 0,
+            signed: false,
+            offset: &RegOrImm::Reg { shift: 0, reg: 1 }
+        });
     }
 
     #[test]

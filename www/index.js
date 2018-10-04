@@ -104,19 +104,23 @@ const dumpState = () => {
     let instr_size = dis === armd ? 4 : 2;
     let start = Math.max(0, pc - 2*instr_size);
     let end = pc + instr_size;
-    let pipeline = dis.disasm(
-        buf8.slice(bios_ptr + start, bios_ptr + end),
-        start);
-    pipeline.forEach((instr) => {
-        $("#pipeline").append(
-            `<div class="col-md-8 col-md-offset-4">
-                ${instr.address.toString(16)}:
-                    (${instr.bytes.map(
-                        (x) => x.toString(16).padStart(2, '0')).join(' ')})
-                    ${instr.mnemonic} ${instr.op_str}
-            </div>`
-        )
-    })
+    try {
+        let pipeline = dis.disasm(
+            buf8.slice(bios_ptr + start, bios_ptr + end),
+            start);
+        pipeline.forEach((instr) => {
+            $("#pipeline").append(
+                `<div class="col-md-8 col-md-offset-4">
+                    ${instr.address.toString(16)}:
+                        (${instr.bytes.map(
+                            (x) => x.toString(16).padStart(2, '0')).join(' ')})
+                        ${instr.mnemonic} ${instr.op_str}
+                </div>`
+            )
+        })
+    } catch(err) {
+        console.error(err);
+    }
 }
 
 const step = () => {
@@ -126,8 +130,13 @@ const step = () => {
 }
 
 const run_until_break = (breakpoint) => {
+    let steps = 0;
     while (VM.get_register(15) !== breakpoint) {
+        if (steps > 1000) { // don't hang indefinitely
+            break;
+        }
         step();
+        steps += 1;
     }
 }
 

@@ -81,8 +81,8 @@ impl DataProc {
         let (result, carry_out) = match self.opcode {
             Op::AND => (op1 & op2, shift_carry),
             Op::EOR => (op1 ^ op2, shift_carry),
-            Op::SUB => op1.overflowing_sub(op2),
-            Op::RSB => op2.overflowing_sub(op1),
+            Op::SUB => sub_with_carry(op1, op2),
+            Op::RSB => sub_with_carry(op2, op1),
             Op::ADD => op1.overflowing_add(op2),
             Op::ADC => {
                 let (r1, c1) = op1.overflowing_add(op2);
@@ -90,16 +90,16 @@ impl DataProc {
                 (r2, c1 || c2)
             },
             Op::SBC => {
-                let (r1, c1) = op1.overflowing_sub(op2);
-                let (r2, c2) = r1.overflowing_sub(1);
+                let (r1, c1) = sub_with_carry(op1, op2);
+                let (r2, c2) = sub_with_carry(r1, 1);
                 let sub_overflow = c1 || c2;
                 let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
                 // if we "underflowed" then overflowed, then they cancel out
                 (result, sub_overflow ^ add_overflow)
             },
             Op::RSC => {
-                let (r1, c1) = op2.overflowing_sub(op1);
-                let (r2, c2) = r1.overflowing_sub(1);
+                let (r1, c1) = sub_with_carry(op2, op1);
+                let (r2, c2) = sub_with_carry(r1, 1);
                 let sub_overflow = c1 || c2;
                 let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
                 // if we "underflowed" then overflowed, then they cancel out
@@ -107,7 +107,7 @@ impl DataProc {
             },
             Op::TST => (op1 & op2, shift_carry),
             Op::TEQ => (op1 ^ op2, shift_carry),
-            Op::CMP => op1.overflowing_sub(op2),
+            Op::CMP => sub_with_carry(op1, op2),
             Op::CMN => op1.overflowing_add(op2),
             Op::ORR => (op1 | op2, shift_carry),
             Op::MOV => (op2, shift_carry),
@@ -226,6 +226,10 @@ fn get_shift_amount(cpu: &CPU, shift: u32) -> u32 {
     }
 }
 
+/// return wrapped sub result and the carry bit of the ALU
+fn sub_with_carry(minuend: u32, subtrahend: u32) -> (u32, bool) {
+    (minuend.wrapping_sub(subtrahend), subtrahend <= minuend)
+}
 
 #[cfg(test)]
 mod test {
@@ -468,5 +472,22 @@ mod test {
             op2: RegOrImm::Imm { rotate: 0, value: 4 }
         }.run(&mut cpu);
         assert_eq!(cpu.get_reg(14), 4);
+    }
+
+    #[test]
+    fn cmp() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(12, 0x20);
+        DataProc {
+            opcode: Op::CMP,
+            set_flags: true,
+            rn: 12,
+            rd: 0,
+            op2: RegOrImm::Imm { rotate: 0, value: 0 }
+        }.run(&mut cpu);
+        assert_eq!(cpu.cpsr.zero, false);
+        assert_eq!(cpu.cpsr.carry, true);
+        assert_eq!(cpu.cpsr.overflow, false);
+        assert_eq!(cpu.cpsr.neg, false);
     }
 }

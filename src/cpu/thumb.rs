@@ -74,7 +74,7 @@ pub fn data_imm(raw: u16) -> Instruction {
     let rd = ((raw >> 8) & 0b111) as usize;
     Instruction::DataProc(DataProc{
         opcode,
-        set_flags: false,
+        set_flags: true,
         rn: rd,
         rd,
         op2: RegOrImm::Imm { rotate: 0, value: raw as u32 & 0xFF },
@@ -382,10 +382,12 @@ pub fn cond_branch(raw: u16) -> Instruction {
 
     Instruction::CondBranch(CondBranch {
         cond: (raw >> 8) & 0xF,
-        offset: offset as i16,
+        offset: (offset as i16) << 1,
     })
 }
 
+// TODO: this extra instruction probably isn't necessary if decode_thumb returns
+// an (Option<Cond>, Instruction) that gets passed to Decoded()
 #[derive(Debug)]
 pub struct CondBranch { pub cond: u16, offset: i16 }
 
@@ -428,7 +430,7 @@ pub fn branch(raw: u16) -> Instruction {
 ///   1111   | H  | offset
 pub fn long_branch(raw: u16) -> Instruction {
     Instruction::LongBranch(LongBranch {
-        first: util::get_bit_hw(raw, 11),
+        first: !util::get_bit_hw(raw, 11),
         offset: raw & 0x7FF
     })
 }
@@ -459,6 +461,7 @@ impl LongBranch {
 
 #[cfg(test)]
 mod test {
+    use ::cpu::status_reg::InstructionSet;
     use super::*;
 
     #[test]
@@ -753,5 +756,39 @@ mod test {
             Instruction::Branch(ins) => { assert_eq!(ins.offset, 0b110); }
             _ => panic!()
         }
+    }
+
+    #[test]
+    fn test_cond_branch() {
+        match cond_branch(0b1101101111111100) {
+            Instruction::CondBranch(ins) => { assert_eq!(ins.offset, -8); },
+            _ => panic!()
+        }
+    }
+
+    #[test]
+    fn test_long_branch() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(14, 0x942);
+        cpu.set_reg(15, 0x1942);
+        cpu.cpsr.isa = InstructionSet::THUMB;
+        match long_branch(0xF7FF) {
+            Instruction::LongBranch(ins) => {
+                assert_eq!(ins.first, true);
+                ins.run(&mut cpu);
+                assert_eq!(cpu.get_reg(14), 0x942);
+            },
+            _ => panic!()
+        }
+        cpu.incr_pc();
+        match long_branch(0xF840) {
+            Instruction::LongBranch(ins) => {
+                assert_eq!(ins.first, false);
+                ins.run(&mut cpu);
+            },
+            _ => panic!()
+        }
+        assert_eq!(cpu.get_reg(14), 0x1943);
+        assert_eq!(cpu.get_reg(15), 0x9C2);
     }
 }
