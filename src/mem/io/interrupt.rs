@@ -161,3 +161,53 @@ impl InterruptBitmap {
 fn get_bit(val: u8, i: u8) -> bool {
     ((val >> i) & 1) == 1
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn write() {
+        let mut mem = Memory::new();
+        mem.set_byte(0x4000208, 1);
+        assert_eq!(mem.int.master_enabled, true);
+
+        mem.set_halfword(0x4000200, 0b0010_1110_1111_0001);
+        {
+            let enabled = &mem.int.enabled;
+            assert_eq!(enabled.vblank, true);
+            assert_eq!(enabled.hblank, false);
+            assert_eq!(enabled.vcount, false);
+            assert_eq!(enabled.timer[0], false);
+            assert_eq!(enabled.timer[1], true);
+            assert_eq!(enabled.timer[2], true);
+            assert_eq!(enabled.timer[3], true);
+            assert_eq!(enabled.serial, true);
+            assert_eq!(enabled.dma[0], false);
+            assert_eq!(enabled.dma[1], true);
+            assert_eq!(enabled.dma[2], true);
+            assert_eq!(enabled.dma[3], true);
+            assert_eq!(enabled.keypad, false);
+            assert_eq!(enabled.gamepak, true);
+        }
+
+        mem.set_halfword(0x4000202, 0b0000_1100_0000_1010);
+        {
+            let triggered = &mem.int.triggered;
+            assert_eq!(triggered.vblank, false);
+            assert_eq!(triggered.hblank, true);
+            assert_eq!(triggered.vcount, false);
+            assert_eq!(triggered.timer[0], true);
+            assert_eq!(triggered.timer[1], false);
+            assert_eq!(triggered.timer[2], false);
+            assert_eq!(triggered.timer[3], false);
+            assert_eq!(triggered.serial, false);
+            assert_eq!(triggered.dma[0], false);
+            assert_eq!(triggered.dma[1], false);
+            assert_eq!(triggered.dma[2], true);
+            assert_eq!(triggered.dma[3], true);
+            assert_eq!(triggered.keypad, false);
+            assert_eq!(triggered.gamepak, false);
+        }
+    }
+}

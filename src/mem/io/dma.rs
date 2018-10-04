@@ -190,6 +190,7 @@ impl DMAChannel {
 }
 /// Specifies how to modify the src/dest of the channel
 enum_from_primitive! {
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum IncrType {
     /// increment after each transfer
@@ -217,6 +218,7 @@ impl IncrType {
 
 /// Enum specifying when the DMA transfer should start
 enum_from_primitive! {
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum TimingMode {
     /// start immediately
@@ -228,4 +230,53 @@ pub enum TimingMode {
     /// depends on the channel, but currently unimplemented
     Refresh,
 }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn write() {
+        let mut mem = Memory::new();
+        mem.set_word(0x40000B0, 0x0F123456);
+        assert_eq!(mem.dma.channels[0].src, 0x07123456);
+        mem.set_word(0x40000D4, 0x08000300);
+        assert_eq!(mem.dma.channels[3].src, 0x08000300);
+        mem.set_word(0x40000CC, 0x08004FFF);
+        assert_eq!(mem.dma.channels[2].dest, 0x00004FFF);
+        mem.set_word(0x40000D8, 0x0910032A);
+        assert_eq!(mem.dma.channels[3].dest, 0x0910032A);
+
+        mem.set_halfword(0x40000B8, 0xABCD);
+        assert_eq!(mem.dma.channels[0].count, 0x2BCD);
+        mem.set_halfword(0x40000D0, 0x1234);
+        assert_eq!(mem.dma.channels[2].count, 0x1234);
+        mem.set_halfword(0x40000Dc, 0xFFFF);
+        assert_eq!(mem.dma.channels[3].count, 0x3FFF);
+
+        mem.set_halfword(0x40000BA, 0b1000_0010_1000_0001);
+        {
+            let channel = &mem.dma.channels[0];
+            assert_eq!(channel.enabled, true);
+            assert_eq!(channel.irq, false);
+            assert_eq!(channel.timing, TimingMode::Now);
+            assert_eq!(channel.word, false);
+            assert_eq!(channel.repeat, true);
+            assert_eq!(channel.src_incr, IncrType::Dec);
+            assert_eq!(channel.dest_incr, IncrType::Inc);
+        }
+        mem.set_halfword(0x40000DE, 0b0001_1100_1101_1111);
+        {
+            let channel = &mem.dma.channels[3];
+            assert_eq!(channel.enabled, false);
+            assert_eq!(channel.irq, false);
+            assert_eq!(channel.timing, TimingMode::VBlank);
+            assert_eq!(channel.word, true);
+            assert_eq!(channel.repeat, false);
+            assert_eq!(channel.src_incr, IncrType::Dec);
+            assert_eq!(channel.dest_incr, IncrType::Fixed);
+        }
+    }
 }
