@@ -55,7 +55,7 @@ impl SignedDataTransfer {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if !self.load && self.signed {
             panic!("should not store when signed operations have been selected");
         }
@@ -73,7 +73,7 @@ impl SignedDataTransfer {
             data_reg: self.rd,
             signed: self.signed,
             offset: &self.offset
-        });
+        })
     }
 }
 

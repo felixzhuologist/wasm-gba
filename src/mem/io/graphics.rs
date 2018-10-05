@@ -315,7 +315,7 @@ impl DispCnt {
 pub struct DispStat {
     /// 0   (W) = V Refresh status. This will be 0 during VDraw, and 1 during VBlank. 
     pub is_vblank: bool,
-    /// 1   (G) = H Refresh status. This will be 0 during HDraw, and 1 during HBlank HDraw
+    /// 1   (G) = H Refresh status. This will be 0 during HDraw, and 1 during HBlank/VBlank
     pub is_hblank: bool,
     /// 2   (Z) = VCount Triggered Status. Gets set to 1 when a Y trigger interrupt occurs. 
     pub vcount_triggered: bool,

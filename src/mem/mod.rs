@@ -12,7 +12,9 @@ pub struct Memory {
     // on write so that the values are in sync with the actual raw data
     pub graphics: io::graphics::LCD,
     pub dma: io::dma::DMA,
-    pub int: io::interrupt::Interrupt
+    pub int: io::interrupt::Interrupt,
+    rom_n_cycle: u8,
+    rom_s_cycle: u8,
 }
 
 impl Memory {
@@ -22,6 +24,8 @@ impl Memory {
             graphics: io::graphics::LCD::new(),
             dma: io::dma::DMA::new(),
             int: io::interrupt::Interrupt::new(),
+            rom_n_cycle: 4,
+            rom_s_cycle: 2,
         }
     }
 
@@ -50,6 +54,10 @@ impl Memory {
             _ => ()
         }
     }
+
+    // how should boundaries be handled? e.g. if start of a mapped segment is
+    // at addr 100 and we write word to addr 98, should still update that
+    // mapped segment?
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
         self.raw.set_halfword(addr, val);
@@ -119,6 +127,26 @@ impl Memory {
         unimplemented!()
     }
 
+    
+    /// Return the number of cycles required to perform a memory access to given
+    /// addr. If first access is true, assumes a non sequential access (N cycle),
+    /// otherwise assumes a sequential access (S cycle).
+    pub fn access_time(&self, addr: u32, first_access: bool) -> u32 {
+        let waitstates = match addr {
+            EWRAM_START...EWRAM_END => 2,
+            VRAM_START...VRAM_END |
+            OAM_START...OAM_END => {
+                let drawing = !self.graphics.disp_stat.is_hblank &&
+                              !self.graphics.disp_stat.is_vblank;
+                if drawing { 1 } else { 0 }
+            }
+            ROM_START...ROM_END =>
+                if first_access { self.rom_n_cycle } else { self.rom_s_cycle },
+            _ => 0,
+        };
+        (1 + waitstates).into()
+    }
+
     pub fn load_rom(&mut self, data: &[u8]) {
         for i in 0..self.raw.sysrom.len() {
             self.raw.sysrom[i] = data[i];
@@ -182,7 +210,7 @@ impl RawMemory {
             VRAM_START...VRAM_END => (&self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&self.oam, addr - OAM_START),
             // TODO: ROM data
-            0x08000000...0x09FFFFFF => unimplemented!(),
+            ROM_START...ROM_END => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
             0x0E000000...0x0E00FFFF => unimplemented!(),
@@ -202,7 +230,7 @@ impl RawMemory {
             VRAM_START...VRAM_END => (&mut self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&mut self.oam, addr - OAM_START),
             // TODO: ROM data
-            0x08000000...0x09FFFFFF => unimplemented!(),
+            ROM_START...ROM_END => unimplemented!(),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
             0x0E000000...0x0E00FFFF => unimplemented!(),

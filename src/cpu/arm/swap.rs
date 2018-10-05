@@ -26,7 +26,7 @@ impl SingleDataSwap {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if self.rn == 15 || self.rd == 15 || self.rm == 15 {
             panic!("can't use R15 as an operand");
         }
@@ -46,6 +46,10 @@ impl SingleDataSwap {
         }
 
         cpu.set_reg(self.rd, memval);
+
+        1 + cpu.mem.access_time(cpu.r[15], true) +
+            cpu.mem.access_time(cpu.r[15] + 4, false) +
+            cpu.mem.access_time(addr, true)
     }
 }
 

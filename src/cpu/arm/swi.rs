@@ -10,7 +10,8 @@ impl SWInterrupt {
         SWInterrupt { comment: ins & 0xFFFFFF }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         cpu.handle_interrupt(InterruptType::SWI);
+        cpu.mem.access_time(cpu.r[15], true) + cpu.mem.access_time(cpu.r[15] + 4, false)
     }
 }

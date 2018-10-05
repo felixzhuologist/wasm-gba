@@ -63,7 +63,7 @@ impl DataProc {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         let mut op1 = cpu.get_reg(self.rn);
         if cpu.cpsr.isa == InstructionSet::THUMB && self.rn == 15 {
             // TODO: this is probably only for the load_addr THUMB instruction...
@@ -123,6 +123,7 @@ impl DataProc {
             _ => true
         };
 
+        let old_pc = cpu.get_reg(15); // save PC in case we overwrite it here
         if should_write {
             cpu.set_reg(self.rd, result);
         }
@@ -142,6 +143,17 @@ impl DataProc {
         if self.rd == 15 && self.set_flags {
             cpu.restore_cpsr();
         }
+
+        let mut cycles = cpu.mem.access_time(old_pc, false);
+        if let RegOrImm::Reg { shift: _, reg: _ } = self.op2 {
+            cycles += 1;
+        }
+        if self.rd == 15 {
+            cpu.should_flush = true;
+            cycles += cpu.mem.access_time(cpu.r[15], true) +
+                cpu.mem.access_time(cpu.r[15] + 4, true);
+        }
+        cycles
     }
 }
 

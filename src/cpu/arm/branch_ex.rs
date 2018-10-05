@@ -18,15 +18,21 @@ impl BranchAndExchange {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         let mut val = cpu.get_reg(self.reg);
         let switch_to_thumb = util::get_bit(val, 0);
         cpu.set_isa(switch_to_thumb);
         if switch_to_thumb { // halfword align the next addr
             val &= !1;
         }
-        cpu.set_reg(15, val);
+        let old_pc = cpu.r[15];
+        cpu.r[15] = val;
         cpu.should_flush = true;
+
+        // 1N + 2S
+        cpu.mem.access_time(old_pc, false) +
+            cpu.mem.access_time(cpu.r[15], true) +
+            cpu.mem.access_time(cpu.r[15] + 4, false)
     }
 }
 

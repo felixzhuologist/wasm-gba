@@ -37,4 +37,5 @@ pub const IE_HI: u32 = 0x4000201;
 pub const IF_LO: u32 = 0x4000202;
 pub const IF_HI: u32 = 0x4000203;
 pub const IME: u32 = 0x4000208;
+pub const WSCNT_LO: u32 = 0x4000204;
 pub const INT_END: u32 = 0x4000208;

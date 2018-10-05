@@ -98,6 +98,16 @@ impl Memory {
                 triggered.keypad ^= get_bit(val, 4);
                 triggered.gamepak ^= get_bit(val, 5);
             },
+            WSCNT_LO => {
+                self.rom_n_cycle = match (val >> 2) & 0b11 {
+                    0 => 4,
+                    1 => 3,
+                    2 => 2,
+                    3 => 8,
+                    _ => panic!("should not get here")
+                };
+                self.rom_s_cycle = if (val >> 4) & 1 == 1 { 1 } else { 2 };
+            }
             _ => ()
         }
     }
@@ -209,6 +219,10 @@ mod test {
             assert_eq!(triggered.keypad, false);
             assert_eq!(triggered.gamepak, false);
         }
+
+        mem.set_byte(0x4000204, 0b1011_0100);
+        assert_eq!(mem.rom_n_cycle, 3);
+        assert_eq!(mem.rom_s_cycle, 1);
     }
 
     #[test]

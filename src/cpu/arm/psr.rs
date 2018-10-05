@@ -64,7 +64,7 @@ impl PSRTransfer {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         match self.trans {
             TransferType::Read { ref stype, dest } => {
                 if dest == 15 {
@@ -96,7 +96,8 @@ impl PSRTransfer {
                     StateRegType::Saved => cpu.set_spsr(val, flag_only)
                 }
             }
-        }
+        };
+        cpu.mem.access_time(cpu.r[15], false)
     }
 }
 

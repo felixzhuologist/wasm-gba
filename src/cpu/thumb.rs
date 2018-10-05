@@ -395,9 +395,15 @@ pub struct CondBranch { pub cond: u16, offset: i16 }
 // instructions they are checked during execution, since only one THUMB
 // instruction is executed conditionally
 impl CondBranch {
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if satisfies_cond(&cpu.cpsr, self.cond as u32) {
+            let old_pc = cpu.r[15];
             cpu.modify_pc(self.offset as i64);
+            cpu.mem.access_time(old_pc, false) +
+                cpu.mem.access_time(cpu.r[15], true) +
+                cpu.mem.access_time(cpu.r[15] + 4, false)
+        } else {
+            1
         }
     }
 }
@@ -441,7 +447,7 @@ pub fn long_branch(raw: u16) -> Instruction {
 pub struct LongBranch { pub first: bool, offset: u16 }
 
 impl LongBranch {
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if self.first {
             let mut offset = (self.offset as u32) << 12;
             if util::get_bit(offset, 22) {
@@ -449,12 +455,17 @@ impl LongBranch {
             }
             let upper = cpu.get_reg(15) as i64 + (offset as i32) as i64;
             cpu.set_reg(14, upper as u32);
+            0 // incur the cycle cost when the second half is run
         } else {
             let next_ins = (cpu.get_reg(15) - 2) | 1;
             let pc = cpu.get_reg(14).wrapping_add((self.offset as u32) << 1);
+            let old_pc = cpu.r[15];
             cpu.set_reg(14, next_ins);
             cpu.set_reg(15, pc & !1);
             cpu.should_flush = true;
+            cpu.mem.access_time(old_pc, false) +
+                cpu.mem.access_time(pc, true) +
+                cpu.mem.access_time(pc + 4, false)
         }
     }
 }

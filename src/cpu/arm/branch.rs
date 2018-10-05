@@ -32,13 +32,19 @@ impl Branch {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
+        let old_pc = cpu.r[15];
         if self.link {
-            let ret = cpu.get_reg(15) - cpu.instruction_size();
+            let ret = old_pc - cpu.instruction_size();
             cpu.set_reg(14, ret);
         }
 
         cpu.modify_pc(self.offset as i64);
+
+        // 1N + 2S
+        cpu.mem.access_time(old_pc, false) +
+            cpu.mem.access_time(cpu.r[15], true) +
+            cpu.mem.access_time(cpu.r[15] + 4, false)
     }
 }
 

@@ -36,7 +36,9 @@ impl BlockDataTransfer {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
+        let mut cycles = cpu.mem.access_time(cpu.r[15], true);
+
         if self.rn == 15 {
             panic!("can't use R15 as base in any LDM or STM instruction");
         }
@@ -80,6 +82,12 @@ impl BlockDataTransfer {
                     addr = if self.offset_up { addr + 4 } else { addr - 4 };
                 }
 
+                if is_first {
+                    cycles += cpu.mem.access_time(addr, true);
+                } else {
+                    cycles += cpu.mem.access_time(addr, false);
+                }
+
                 let reg = if self.offset_up { i } else { 15 - i };
                 if self.load {
                     if reg == self.rn {
@@ -117,11 +125,15 @@ impl BlockDataTransfer {
         if force_user_bank {
             cpu.cpsr.mode = original_mode;
         }
-        let pc = cpu.get_reg(15);
+        let pc = cpu.r[15];
         if is_pc_in_list && (pc & 1) == 1 {
             cpu.cpsr.isa = InstructionSet::THUMB;
             cpu.set_reg(15, pc & !1);
         }
+
+        // this is 2N + (n - 1)S + 1I, which isn't completely accurate but
+        // close enough
+        cycles + 1
     }
 }
 

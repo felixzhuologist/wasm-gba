@@ -158,7 +158,7 @@ impl CPUWrapper {
             if cond.is_some() && !satisfies_cond(&self.cpu.cpsr, cond.unwrap()) {
                 return 1;
             }
-            match ins {
+            return match ins {
                 Instruction::DataProc(ins) => ins.run(&mut self.cpu),
                 Instruction::PSRTransfer(ins) => ins.run(&mut self.cpu),
                 Instruction::Multiply(ins) => ins.run(&mut self.cpu),
@@ -173,7 +173,6 @@ impl CPUWrapper {
                 Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
                 Instruction::LongBranch(ins) => ins.run(&mut self.cpu),
             }
-            return 1;
         }
         return 0;
     }
@@ -296,8 +295,9 @@ impl CPU {
         };
     }
 
-    // TODO: merge params into struct?
-    pub fn transfer_reg(&mut self, params: TransferParams) {
+    /// Perform a transfer between registers/memory, and return the number of
+    /// cycles elapsed
+    pub fn transfer_reg(&mut self, params: TransferParams) -> u32 {
         // pre transfer
         let mut addr = self.get_reg(params.base_reg);
         let offset = self.get_offset(&params.offset);
@@ -353,10 +353,24 @@ impl CPU {
             addr = if params.offset_up { addr + offset } else { addr - offset };
         }
 
+        // save pc in case base reg is 15 before write back
+        let old_pc = self.r[15];
         // write back is assumed if post indexing
         if !params.pre_index || params.write_back {
             self.set_reg(params.base_reg, addr);
-        } 
+        }
+
+        if params.load && params.base_reg == 15 {
+            1 + self.mem.access_time(old_pc, true) +
+                self.mem.access_time(old_pc + 4, false) +
+                self.mem.access_time(self.r[15], true) +
+                self.mem.access_time(self.r[15] + 4, false)
+        } else if params.load {
+            1 + self.mem.access_time(old_pc, true) +
+                self.mem.access_time(old_pc + 4, false)
+        } else {
+            self.mem.access_time(old_pc, true) + self.mem.access_time(addr, true)
+        }
     }
 
     /// Return size of the current instruction set in bytes

@@ -30,7 +30,7 @@ impl Multiply {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if self.rd == 15 || self.rm == 15 || self.rn == 15 {
             panic!("Can't use R15 as operand or dest in mul");
         }
@@ -39,16 +39,30 @@ impl Multiply {
         }
         // since we only care about the bottom 32 bits, this will be the same
         // for both signed and unsigned integers
-        let mut result: u64 = (cpu.get_reg(self.rm) as u64) * (cpu.get_reg(self.rn) as u64);
+        let multiplier = cpu.get_reg(self.rs);
+        let mut result: u64 = (cpu.get_reg(self.rm) as u64) * (multiplier as u64);
         if self.accumulate {
-            result += cpu.get_reg(self.rs) as u64;
+            result += cpu.get_reg(self.rn) as u64;
         }
         cpu.set_reg(self.rd, result as u32);
         if self.set_flags {
             cpu.cpsr.neg = ((result >> 31) & 1) == 1;
             cpu.cpsr.zero = result == 0;
         }
+
+        cpu.mem.access_time(cpu.r[15], false) +
+            mul_cycle_time(multiplier) +
+            if self.accumulate { 1 } else { 0 }
     }
+}
+
+pub fn mul_cycle_time(multiplier: u32) -> u32 {
+    let second_byte = (multiplier >> 8) as u8;
+    let third_byte = (multiplier >> 16) as u8;
+    let fourth_byte = (multiplier >> 24) as u8;
+    1 + if second_byte == 0 || second_byte == 0xFF { 0 } else { 1 } +
+        if third_byte == 0 || third_byte == 0xFF { 0 } else { 1 } +
+        if fourth_byte == 0 || fourth_byte == 0xFF { 0 } else { 1 }
 }
 
 #[cfg(test)]

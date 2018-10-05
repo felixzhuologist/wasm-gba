@@ -53,7 +53,7 @@ impl SingleDataTransfer {
         }
     }
 
-    pub fn run(&self, cpu: &mut CPU) {
+    pub fn run(&self, cpu: &mut CPU) -> u32 {
         if self.rn == 15 && self.write_back {
             panic!("cannot write back when R15 is the base register");
         }
@@ -76,7 +76,7 @@ impl SingleDataTransfer {
             data_reg: self.rd,
             signed: false,
             offset: &self.offset
-        });
+        })
     }
 }
 
