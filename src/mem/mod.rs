@@ -3,6 +3,7 @@ pub mod io;
 
 use util;
 use mem::io::addrs::*;
+use mem::io::dma::TimingMode;
 use self::addrs::*;
 
 pub struct Memory {
@@ -76,6 +77,46 @@ impl Memory {
                 self.update_int_word(addr, val),
             _ => ()
         }
+    }
+
+    pub fn on_vblank_hook(&mut self) {
+        self.graphics.disp_stat.is_vblank = true;
+        self.graphics.disp_stat.is_hblank = false;
+        if self.graphics.disp_stat.vblank_irq_enabled {
+            self.int.triggered.vblank = true;
+            self.raw.io[(IF_LO - IO_START) as usize] |= 1;
+        }
+        self.check_dma(TimingMode::VBlank);
+    }
+
+    pub fn on_hblank_hook(&mut self) {
+        self.graphics.disp_stat.is_hblank = true;
+        if self.graphics.disp_stat.hblank_irq_enabled {
+            self.int.triggered.hblank = true;
+            self.raw.io[(IF_LO  - IO_START) as usize] |= 0b10;
+        }
+        self.check_dma(TimingMode::HBlank);
+    }
+
+    pub fn on_vcount_hook(&mut self, vcount: u32) {
+        self.graphics.update_vcount(vcount);
+        if self.graphics.disp_stat.vcount_triggered &&
+            self.graphics.disp_stat.vcount_irq_enabled {
+            self.int.triggered.vcount = true;
+            self.raw.io[(IF_LO  - IO_START) as usize] |= 0b100;
+        }
+    }
+
+    pub fn on_dma_finish_hook(&mut self, channel: usize) {
+        if self.dma.channels[channel].irq {
+            self.int.triggered.dma[channel] = true;
+            self.raw.io[(IF_HI - IO_START) as usize] |= 1 << channel;
+        }
+    }
+
+    // TODO: where should this method go?
+    pub fn update_pixel(&mut self, _row: u32, _col: u32) {
+        unimplemented!()
     }
 
     pub fn load_rom(&mut self, data: &[u8]) {

@@ -21,7 +21,7 @@ pub struct LCD {
     disp_cnt: DispCnt,
     pub disp_stat: DispStat,
     /// Stores the current Y location of the current line being drawn
-    vcount: u8,
+    pub vcount: u8,
     bg_cnt: [BgCnt; 4],
     bg_offset_x: [u16; 4],
     bg_offset_y: [u16; 4],
@@ -79,6 +79,12 @@ impl LCD {
             alpha_b_coef: 0.0,
             brightness_coef: 0.0,
         }
+    }
+
+    pub fn update_vcount(&mut self, vcount: u32) {
+        self.vcount = vcount as u8;
+        self.disp_stat.vcount_triggered =
+            self.vcount == self.disp_stat.vcount_line_trigger;
     }
 }
 
@@ -314,11 +320,11 @@ pub struct DispStat {
     /// 2   (Z) = VCount Triggered Status. Gets set to 1 when a Y trigger interrupt occurs. 
     pub vcount_triggered: bool,
     /// 3   (V) = Enables LCD's VBlank IRQ. This interrupt goes off at the start of VBlank. 
-    vblank_irq_enabled: bool,
+    pub vblank_irq_enabled: bool,
     /// 4   (H) = Enables LCD's HBlank IRQ. This interrupt goes off at the start of HBlank.
-    hblank_irq_enabled: bool,
+    pub hblank_irq_enabled: bool,
     /// 5   (Y) = Enable VCount trigger IRQ. Goes off when VCount line trigger is reached.
-    vcount_irq_enabled: bool,
+    pub vcount_irq_enabled: bool,
     /// 8-F (T) = Vcount line trigger. Set this to the VCount value you wish to trigger an
     ///           interrupt. 
     vcount_line_trigger: u8

@@ -16,6 +16,12 @@ use self::pipeline::{
 use mem;
 use util;
 
+pub const CYCLES_PER_PIXEL: u32 = 4;
+pub const DRAW_WIDTH: u32 = 240;
+pub const BLANK_WIDTH: u32 = 68;
+pub const DRAW_HEIGHT: u32 = 160;
+pub const BLANK_HEIGHT: u32 = 68;
+
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
 pub struct CPUWrapper {
@@ -45,11 +51,61 @@ impl CPUWrapper {
         }
     }
 
-    /// Run a single instruction
-    pub fn step(&mut self) {
+    /// Run for a full refresh cycle. Does not actually draw the framebuffer
+    pub fn frame(&mut self) {
+        self.vdraw();
+        self.vblank();
+    }
+
+    pub fn vdraw(&mut self) {
+        self.cpu.mem.graphics.disp_stat.is_vblank = false;
+        for row in 0..DRAW_HEIGHT {
+            self.scanline(row);
+            self.cpu.mem.on_vcount_hook(row);
+        }
+    }
+
+    pub fn vblank(&mut self) {
+        self.cpu.mem.on_vblank_hook();
+        self.run_n_cycles(BLANK_HEIGHT * CYCLES_PER_PIXEL);
+    }
+
+    pub fn scanline(&mut self, row: u32) {
+        self.hdraw(row);
+        self.hblank();
+    }
+
+    pub fn hdraw(&mut self, row: u32) {
+        self.cpu.mem.graphics.disp_stat.is_hblank = false;
+        let mut cycles = 0u32;
+        let mut col = 0;
+        while cycles < (DRAW_WIDTH * CYCLES_PER_PIXEL) {
+            cycles += self.step();
+            for _ in 0..((cycles - col*CYCLES_PER_PIXEL) / CYCLES_PER_PIXEL) {
+                self.cpu.mem.update_pixel(row, col);
+                col += 1;
+            }
+        }
+    }
+
+    pub fn hblank(&mut self) {
+        self.cpu.mem.on_hblank_hook();
+        self.run_n_cycles(BLANK_WIDTH * CYCLES_PER_PIXEL);
+    }
+
+    pub fn run_n_cycles(&mut self, cycles: u32) {
+        let mut cycles_run = 0;
+        while cycles_run < cycles {
+            cycles_run += self.step();
+        }
+    }
+
+    /// Run a single fetch/decode/execute cycle in the instruction pipeline,
+    /// and check for DMA/interrupts
+    pub fn step(&mut self) -> u32 {
         self.fetch();
         self.decode();
-        self.execute();
+        let cycles = self.execute();
 
         if self.cpu.should_flush {
             self.flush_pipeline();
@@ -59,8 +115,9 @@ impl CPUWrapper {
             self.cpu.incr_pc();
         }
 
-        self.cpu.mem.check_dma();
+        self.cpu.mem.check_dma(mem::io::dma::TimingMode::Now);
         self.cpu.check_interrupts();
+        cycles
     }
 
     pub fn fetch(&mut self) {
@@ -91,12 +148,15 @@ impl CPUWrapper {
         }
     }
 
-    pub fn execute(&mut self) {
+    /// Execute the next instruction in the pipeline if it exists and return
+    /// the number of cycles it took
+    // TODO: return correct number of cycles
+    pub fn execute(&mut self) -> u32 {
         // index of the third element from the end
         let idx = ((self.idx + 1) % 3) as usize;
         if let PipelineInstruction::Decoded(cond, ref ins) = self.pipeline[idx] {
             if cond.is_some() && !satisfies_cond(&self.cpu.cpsr, cond.unwrap()) {
-                return;
+                return 1;
             }
             match ins {
                 Instruction::DataProc(ins) => ins.run(&mut self.cpu),
@@ -113,7 +173,9 @@ impl CPUWrapper {
                 Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
                 Instruction::LongBranch(ins) => ins.run(&mut self.cpu),
             }
+            return 1;
         }
+        return 0;
     }
 
     pub fn flush_pipeline(&mut self) {

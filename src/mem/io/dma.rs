@@ -15,7 +15,7 @@ use mem::Memory;
 use util;
 
 pub struct DMA {
-    channels: [DMAChannel; 4],
+    pub channels: [DMAChannel; 4],
 }
 
 impl DMA {
@@ -95,61 +95,54 @@ impl Memory {
         self.update_dma_hw(addr + 2, val >> 16);
     }
 
-    pub fn check_dma(&mut self) {
+    pub fn check_dma(&mut self, timing: TimingMode) {
         for i in 0..self.dma.channels.len() {
-            self.check_dma_channel(i)
+            if self.dma.channels[i].enabled  && self.dma.channels[i].timing == timing {
+                self.run_dma(i)
+            }
         }
     }
 
-    fn check_dma_channel(&mut self, channel_num: usize) {
-        let channel = &mut self.dma.channels[channel_num];
-        let timing_match = match channel.timing {
-            TimingMode::Now => true,
-            TimingMode::VBlank => self.graphics.disp_stat.is_vblank,
-            TimingMode::HBlank => self.graphics.disp_stat.is_hblank,
-            TimingMode::Refresh => unimplemented!()
-        };
-        if !channel.enabled || !timing_match {
-            return;
+    fn run_dma(&mut self, channel_num: usize) {
+        { // scope with mutable borrow on self.dma.channels
+            let channel = &mut self.dma.channels[channel_num];
+
+            // word or halfword align the src/dest addrs depending on chunk size
+            let mask = if channel.word { !3 } else { !1 };
+            let src = channel.src & mask;
+            let dest = channel.dest & mask;
+
+            let chunk_size = if channel.word { 4 } else { 2 };
+            // TODO: is using copy_from_slice() faster?
+            // TODO: can avoid this loop if the dest is fixed
+            for _ in 0..(channel.count * chunk_size) {
+                // TODO: if update_x_hw or update_x_word get implemented separately
+                // from the byte version, should call that here instead
+                let val = self.raw.get_byte(src);
+                self.raw.set_byte(dest, val);
+
+                channel.src_incr.update_addr(src);
+                channel.dest_incr.update_addr(dest);
+            }
+
+            // update mapped/raw addrs
+            channel.src = src;
+            match channel.dest_incr {
+                IncrType::Reload => (),
+                _ => channel.dest = dest
+            }
+            self.raw.set_word(DMA_SAD[channel_num], channel.src);
+            self.raw.set_word(DMA_DAD[channel_num], channel.dest);
+
+            // update mapped/raw cnt register
+            if !channel.repeat {
+                channel.enabled = false;
+                let old_reg = self.raw.get_word(DMA_CNT[channel_num]);
+                self.raw.set_word(DMA_CNT[channel_num], old_reg & !0x8000);
+            }
         }
 
-        // word or halfword align the src/dest addrs depending on chunk size
-        let mask = if channel.word { !3 } else { !1 };
-        let src = channel.src & mask;
-        let dest = channel.dest & mask;
-
-        let chunk_size = if channel.word { 4 } else { 2 };
-        // TODO: is using copy_from_slice() faster?
-        // TODO: can avoid this loop if the dest is fixed
-        for _ in 0..(channel.count * chunk_size) {
-            // TODO: if update_x_hw or update_x_word get implemented separately
-            // from the byte version, should call that here instead
-            let val = self.raw.get_byte(src);
-            self.raw.set_byte(dest, val);
-
-            channel.src_incr.update_addr(src);
-            channel.dest_incr.update_addr(dest);
-        }
-
-        // update mapped/raw addrs
-        channel.src = src;
-        match channel.dest_incr {
-            IncrType::Reload => (),
-            _ => channel.dest = dest
-        }
-        self.raw.set_word(DMA_SAD[channel_num], channel.src);
-        self.raw.set_word(DMA_DAD[channel_num], channel.dest);
-
-        // update mapped/raw cnt register
-        if !channel.repeat {
-            channel.enabled = false;
-            let old_reg = self.raw.get_word(DMA_CNT[channel_num]);
-            self.raw.set_word(DMA_CNT[channel_num], old_reg & !0x8000);
-        }
-
-        if channel.irq {
-            self.int.triggered.dma[channel_num] = true;
-        }
+        self.on_dma_finish_hook(channel_num);
     }
 }
 
@@ -168,7 +161,7 @@ pub struct DMAChannel {
     word: bool,
     timing: TimingMode,
     /// if true, raise an interrupt when finished
-    irq: bool,
+    pub irq: bool,
     enabled: bool,
 }
 
