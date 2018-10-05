@@ -1,5 +1,6 @@
 mod addrs;
 pub mod io;
+pub mod oam;
 
 use util;
 use mem::io::addrs::*;
@@ -13,6 +14,7 @@ pub struct Memory {
     pub graphics: io::graphics::LCD,
     pub dma: io::dma::DMA,
     pub int: io::interrupt::Interrupt,
+    pub sprites: oam::Sprites,
     rom_n_cycle: u8,
     rom_s_cycle: u8,
 }
@@ -24,6 +26,7 @@ impl Memory {
             graphics: io::graphics::LCD::new(),
             dma: io::dma::DMA::new(),
             int: io::interrupt::Interrupt::new(),
+            sprites: oam::Sprites::new(),
             rom_n_cycle: 4,
             rom_s_cycle: 2,
         }
@@ -171,8 +174,7 @@ pub struct RawMemory {
     /// stores the frame buffer in bitmapped modes or the tile data/tile maps
     /// in text, rotate/scale modes
     vram: [u8; 0x18000],
-    /// stores the objects/sprites. PAL/VRAM/OAM segments of memory are only
-    /// accessible during HBlank/VBlank periods (i.e. when not drawing)
+    /// stores 128 entries of 8 bytes, containing information for each sprite
     oam: [u8; 0x400],
     // ROM in the game cartridge appears in this area
     // TODO: allocate on the javascript side?
