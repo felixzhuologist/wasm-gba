@@ -210,4 +210,47 @@ mod test {
             assert_eq!(triggered.gamepak, false);
         }
     }
+
+    #[test]
+    fn acknowledge_int() {
+        let mut mem = Memory::new();
+        mem.set_halfword(0x4000202, 0b0000_1100_0000_1010);
+        {
+            let triggered = &mem.int.triggered;
+            assert_eq!(triggered.vblank, false);
+            assert_eq!(triggered.hblank, true);
+            assert_eq!(triggered.vcount, false);
+            assert_eq!(triggered.timer[0], true);
+            assert_eq!(triggered.timer[1], false);
+            assert_eq!(triggered.timer[2], false);
+            assert_eq!(triggered.timer[3], false);
+            assert_eq!(triggered.serial, false);
+            assert_eq!(triggered.dma[0], false);
+            assert_eq!(triggered.dma[1], false);
+            assert_eq!(triggered.dma[2], true);
+            assert_eq!(triggered.dma[3], true);
+            assert_eq!(triggered.keypad, false);
+            assert_eq!(triggered.gamepak, false);
+        }
+
+        // acknowledge hblank and timer[0]
+        mem.set_halfword(0x4000202, 0b0000_0000_0000_1010);
+        {
+            let triggered = &mem.int.triggered;
+            assert_eq!(triggered.vblank, false);
+            assert_eq!(triggered.hblank, false);
+            assert_eq!(triggered.vcount, false);
+            assert_eq!(triggered.timer[0], false);
+            assert_eq!(triggered.timer[1], false);
+            assert_eq!(triggered.timer[2], false);
+            assert_eq!(triggered.timer[3], false);
+            assert_eq!(triggered.serial, false);
+            assert_eq!(triggered.dma[0], false);
+            assert_eq!(triggered.dma[1], false);
+            assert_eq!(triggered.dma[2], true);
+            assert_eq!(triggered.dma[3], true);
+            assert_eq!(triggered.keypad, false);
+            assert_eq!(triggered.gamepak, false);
+        }
+    }
 }
