@@ -54,6 +54,8 @@ impl Memory {
                 self.update_dma_byte(addr, val),
             INT_START...INT_END =>
                 self.update_int_byte(addr, val),
+            OAM_START...OAM_END =>
+                self.update_oam_byte(addr, val),
             _ => ()
         }
     }
@@ -72,6 +74,8 @@ impl Memory {
                 self.update_dma_hw(addr, val),
             INT_START...INT_END =>
                 self.update_int_hw(addr, val),
+            OAM_START...OAM_END =>
+                self.update_oam_hw(addr, val),
             _ => ()
         }
     }
@@ -86,6 +90,8 @@ impl Memory {
                 self.update_dma_word(addr, val),
             INT_START...INT_END =>
                 self.update_int_word(addr, val),
+            OAM_START...OAM_END =>
+                self.update_oam_word(addr, val),
             _ => ()
         }
     }
