@@ -5,10 +5,25 @@ use wasm_bindgen::prelude::*;
 pub static mut GBA: CPUWrapper = CPUWrapper::new();
 
 #[wasm_bindgen]
+extern {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(msg: &str);
+}
+
+// A macro to provide `println!(..)`-style syntax for `console.log` logging.
+macro_rules! log {
+    ($($t:tt)*) => (log(&format!($($t)*)))
+}
+
+#[wasm_bindgen]
+pub fn upload_bios(data: &[u8]) {
+    unsafe { GBA.cpu.mem.load_bios(data) }
+}
+
+#[wasm_bindgen]
 pub fn upload_rom(data: &[u8]) {
-    unsafe {
-        GBA.cpu.mem.load_rom(data)
-    }
+    log!("rom size: {:X}", data.len());
+    unsafe { GBA.cpu.mem.load_rom(data) }
 }
 
 #[wasm_bindgen]
@@ -24,6 +39,11 @@ pub fn get_bios() -> *const u8 {
 #[wasm_bindgen]
 pub fn step() {
     unsafe { GBA.step(); }
+}
+
+#[wasm_bindgen]
+pub fn frame() {
+    unsafe { GBA.frame(); }
 }
 
 #[wasm_bindgen]

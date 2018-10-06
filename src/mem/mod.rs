@@ -2,6 +2,7 @@ mod addrs;
 pub mod io;
 pub mod oam;
 
+use std;
 use util;
 use mem::io::addrs::*;
 use mem::io::dma::TimingMode;
@@ -136,7 +137,6 @@ impl Memory {
         unimplemented!()
     }
 
-    
     /// Return the number of cycles required to perform a memory access to given
     /// addr. If first access is true, assumes a non sequential access (N cycle),
     /// otherwise assumes a sequential access (S cycle).
@@ -156,9 +156,17 @@ impl Memory {
         (1 + waitstates).into()
     }
 
-    pub fn load_rom(&mut self, data: &[u8]) {
+    pub fn load_bios(&mut self, data: &[u8]) {
         for i in 0..self.raw.sysrom.len() {
             self.raw.sysrom[i] = data[i];
+        }
+    }
+
+    pub fn load_rom(&mut self, data: &[u8]) {
+        unsafe {
+            self.raw.rom = Some(std::slice::from_raw_parts(
+                data as *const [u8] as *const u8,
+                data.len()));
         }
     }
 }
@@ -182,9 +190,9 @@ pub struct RawMemory {
     vram: [u8; 0x18000],
     /// stores 128 entries of 8 bytes, containing information for each sprite
     oam: [u8; 0x400],
-    // ROM in the game cartridge appears in this area
-    // TODO: allocate on the javascript side?
-    // pak: Vec<u8>,
+    // ROM in the game cartridge appears in this area. This ROM gets uploaded
+    // on the javascript side and then a reference to it is set here
+    rom: Option<&'static [u8]>,
     // either SRAM or flash ROM used for saving game data
     // TODO: allocate on the javascript side?
     // cart: Vec<u8>,
@@ -200,6 +208,7 @@ impl RawMemory {
             pal: [0; 0x400],
             vram: [0; 0x18000],
             oam: [0; 0x400],
+            rom: None,
             // pak: Vec::new(),
             // cart: Vec::new(),
         }
@@ -217,8 +226,7 @@ impl RawMemory {
             PAL_START...PAL_END => (&self.pal, addr - PAL_START),
             VRAM_START...VRAM_END => (&self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&self.oam, addr - OAM_START),
-            // TODO: ROM data
-            ROM_START...ROM_END => unimplemented!(),
+            ROM_START...ROM_END => (self.rom.unwrap(), addr - ROM_START),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
             0x0E000000...0x0E00FFFF => unimplemented!(),
@@ -237,8 +245,7 @@ impl RawMemory {
             PAL_START...PAL_END => (&mut self.pal, addr - PAL_START),
             VRAM_START...VRAM_END => (&mut self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&mut self.oam, addr - OAM_START),
-            // TODO: ROM data
-            ROM_START...ROM_END => unimplemented!(),
+            ROM_START...ROM_END => panic!("trying to write to ROM"),
             0x0A000000...0x0BFFFFFF => unimplemented!(),
             0x0C000000...0x0DFFFFFF => unimplemented!(),
             0x0E000000...0x0E00FFFF => unimplemented!(),

@@ -11,6 +11,7 @@ const thumbd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
 let dis = armd;
 
 let bios_ptr = VM.get_bios();
+let rom;
 let buf8 = new Uint8Array(memory.buffer);
 
 const parse_cpsr = (raw) => ({
@@ -51,27 +52,24 @@ const update_shared_mem = () => {
     buf8 = new Uint8Array(memory.buffer);
 }
 
-const addBiosListener = () => {
-    let input = document.getElementById("bios");
+const addUploadListener = (id, callback) => {
+    let input = document.getElementById(id);
     input.addEventListener("change", (event) => {
-        let bios = event.target.files[0];
+        let file = event.target.files[0];
         let reader = new FileReader();
         reader.onload = (event) => {
             let data = new Uint8Array(event.target.result);
-            VM.upload_rom(data);
-            update_shared_mem();
-            dumpState();
-            // pipeline fill
-            step();
-            step();
+            callback(data);
         };
-        reader.readAsArrayBuffer(bios);
+        reader.readAsArrayBuffer(file);
     })
 }
 
 const addDebugListener = () => {
     const stepButton = document.getElementById('step');
-    stepButton.addEventListener("click", event => step());
+    stepButton.addEventListener('click', event => step());
+    const frameButton = document.getElementById('frame');
+    frameButton.addEventListener('click', event => frame());
     const runButton = document.getElementById('bpsubmit')
     runButton.addEventListener("click", event => {
         let bp = parseInt(document.getElementById('bpinput').value, 16);
@@ -129,6 +127,12 @@ const step = () => {
     dumpState();
 }
 
+const frame = () => {
+    VM.frame();
+    dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
+    dumpState();
+}
+
 const run_until_break = (breakpoint) => {
     let steps = 0;
     let started = false;
@@ -144,7 +148,19 @@ const run_until_break = (breakpoint) => {
     dumpState();
 }
 
-addBiosListener();
+addUploadListener("bios", (data) => {
+    VM.upload_bios(data);
+    update_shared_mem();
+    dumpState();
+    // pipeline fill
+    step();
+    step();
+});
+addUploadListener("rom", (data) => {
+    VM.upload_rom(data);
+    update_shared_mem();
+    rom = data;
+});
 addDebugListener();
 }
 
