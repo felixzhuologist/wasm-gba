@@ -69,7 +69,11 @@ impl CPUWrapper {
 
     pub fn vblank(&mut self) {
         self.cpu.mem.on_vblank_hook();
-        self.run_n_cycles(BLANK_HEIGHT * CYCLES_PER_PIXEL);
+        for row in 0..BLANK_HEIGHT {
+            self.run_n_cycles(DRAW_WIDTH * CYCLES_PER_PIXEL);
+            self.hblank();
+            self.cpu.mem.on_vcount_hook(row + DRAW_HEIGHT);
+        }
     }
 
     pub fn scanline(&mut self, row: u32) {

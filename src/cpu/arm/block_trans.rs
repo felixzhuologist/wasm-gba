@@ -202,7 +202,10 @@ mod test {
         assert_eq!(cpu.get_reg(5), 0x321);
         assert_eq!(cpu.get_reg(7), 0xABC);
         assert_eq!(cpu.get_reg(0), 0x0300000C);
+    }
 
+    #[test]
+    fn pre_incr_up_load_bios() { // failed instruction from the BIOS
         let mut cpu = CPU::new();
         cpu.set_reg(0, 0x3007EA0);
         cpu.set_reg(1, 0x4000220);

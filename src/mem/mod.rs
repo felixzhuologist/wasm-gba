@@ -1,4 +1,6 @@
 mod addrs;
+mod framebuffer;
+mod palette;
 pub mod io;
 pub mod oam;
 
@@ -16,8 +18,13 @@ pub struct Memory {
     pub dma: io::dma::DMA,
     pub int: io::interrupt::Interrupt,
     pub sprites: oam::Sprites,
+    pub palette: palette::Palette,
+
+    // waitstates for reading from ROM, can be configured by writing to REG_WSCNT
     rom_n_cycle: u8,
     rom_s_cycle: u8,
+
+    pub framebuffer: framebuffer::FrameBuffer,
 }
 
 impl Memory {
@@ -28,8 +35,10 @@ impl Memory {
             dma: io::dma::DMA::new(),
             int: io::interrupt::Interrupt::new(),
             sprites: oam::Sprites::new(),
+            palette: palette::Palette::new(),
             rom_n_cycle: 4,
             rom_s_cycle: 2,
+            framebuffer: framebuffer::FrameBuffer::new(),
         }
     }
 
@@ -57,6 +66,8 @@ impl Memory {
                 self.update_int_byte(addr, val),
             OAM_START...OAM_END =>
                 self.update_oam_byte(addr, val),
+            PAL_START...PAL_END =>
+                self.update_pal_byte(addr, val),
             _ => ()
         }
     }
@@ -77,6 +88,8 @@ impl Memory {
                 self.update_int_hw(addr, val),
             OAM_START...OAM_END =>
                 self.update_oam_hw(addr, val),
+            PAL_START...PAL_END =>
+                self.update_pal_hw(addr, val),
             _ => ()
         }
     }
@@ -93,6 +106,8 @@ impl Memory {
                 self.update_int_word(addr, val),
             OAM_START...OAM_END =>
                 self.update_oam_word(addr, val),
+            PAL_START...PAL_END =>
+                self.update_pal_word(addr, val),
             _ => ()
         }
     }
@@ -130,11 +145,6 @@ impl Memory {
             self.int.triggered.dma[channel] = true;
             self.raw.io[(IF_HI - IO_START) as usize] |= 1 << channel;
         }
-    }
-
-    // TODO: where should this method go?
-    pub fn update_pixel(&mut self, _row: u32, _col: u32) {
-        unimplemented!()
     }
 
     /// Return the number of cycles required to perform a memory access to given
@@ -183,7 +193,8 @@ pub struct RawMemory {
     /// a mirror of the memory mapped ASIC registers on the GBA used to control
     /// graphics, sound, DMA, timers, etc.
     io: [u8; 0x400],
-    /// specifies 16 bit color values for the paletted modes
+    /// specifies 16 bit color values for the paletted modes. There are two
+    /// palettes of 256 colors - one for backgrounds and one for sprites.
     pal: [u8; 0x400],
     /// stores the frame buffer in bitmapped modes or the tile data/tile maps
     /// in text, rotate/scale modes
