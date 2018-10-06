@@ -1,6 +1,8 @@
 // TODO: can we only compile this file when we build for wasm?
 use cpu::CPUWrapper;
 use wasm_bindgen::prelude::*;
+use console_error_panic_hook;
+use std::panic;
 
 pub static mut GBA: CPUWrapper = CPUWrapper::new();
 
@@ -8,11 +10,32 @@ pub static mut GBA: CPUWrapper = CPUWrapper::new();
 extern {
     #[wasm_bindgen(js_namespace = console)]
     fn log(msg: &str);
+
+    #[wasm_bindgen(js_namespace = console)]
+    fn error(msg: &str);
 }
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
 macro_rules! log {
     ($($t:tt)*) => (log(&format!($($t)*)))
+}
+
+macro_rules! error {
+    ($($t:tt)*) => (error(&format!($($t)*)))
+}
+
+/// should be called once to initialize panic hook
+#[wasm_bindgen]
+pub fn set_panic_hook() {
+    panic::set_hook(Box::new(|inf| {
+        console_error_panic_hook::hook(inf);
+        error!("CPU dump:");
+        unsafe {
+            error!("Failed instruction: {:#?}", GBA.last_instruction.clone());
+            error!("CPSR: {:#?}", GBA.cpu.cpsr);
+            error!("User registers: {:#X?}", GBA.cpu.r);
+        }
+    }));
 }
 
 #[wasm_bindgen]

@@ -33,6 +33,7 @@ pub struct CPUWrapper {
     pipeline: [PipelineInstruction; 3],
     // index into the circular buffer
     idx: usize,
+    pub last_instruction: Option<Instruction>,
 }
 
 impl CPUWrapper {
@@ -48,6 +49,7 @@ impl CPUWrapper {
                 PipelineInstruction::Empty,
             ],
             idx: 0,
+            last_instruction: None
         }
     }
 
@@ -158,6 +160,7 @@ impl CPUWrapper {
             if cond.is_some() && !satisfies_cond(&self.cpu.cpsr, cond.unwrap()) {
                 return 1;
             }
+            self.last_instruction = Some(ins.clone());
             return match ins {
                 Instruction::DataProc(ins) => ins.run(&mut self.cpu),
                 Instruction::PSRTransfer(ins) => ins.run(&mut self.cpu),

@@ -4,7 +4,7 @@ use ::util;
 /// This instruction specifies a jump of +/- 32Mbytes. The branch offset must take
 /// account of the prefetch operation, which causes the PC to be 1/2 words ahead of
 /// the current instruction (for THUMB/ARM)
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Branch {
     /// signed offset from the PC
     pub offset: i32,

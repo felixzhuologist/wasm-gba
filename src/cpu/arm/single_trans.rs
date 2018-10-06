@@ -7,7 +7,7 @@ use ::util;
 /// be written back into the base register if auto-indexing is required
 // TODO: what happens when write_back is true during a load into the base reg?
 //       which one takes precedence?
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SingleDataTransfer {
     /// if true, add offset before transfer else add after
     pub pre_index: bool,

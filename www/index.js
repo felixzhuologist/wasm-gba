@@ -148,6 +148,7 @@ const run_until_break = (breakpoint) => {
     dumpState();
 }
 
+VM.set_panic_hook();
 addUploadListener("bios", (data) => {
     VM.upload_bios(data);
     update_shared_mem();

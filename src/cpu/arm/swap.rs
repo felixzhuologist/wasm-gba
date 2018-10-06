@@ -2,7 +2,7 @@ use ::cpu::CPU;
 use ::util;
 
 /// Swap a byte or word between a register and external memory "atomically"
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SingleDataSwap {
     /// if true, swap byte else swap word
     byte: bool,

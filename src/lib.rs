@@ -6,6 +6,7 @@
 extern crate enum_primitive;
 extern crate num;
 extern crate wasm_bindgen;
+extern crate console_error_panic_hook;
 
 pub use wasm::*;
 pub use wasm::GBA;

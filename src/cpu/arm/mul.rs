@@ -4,7 +4,7 @@ use ::util;
 /// The multiply and multiply-accumulate instructions perform integer multiplication
 /// on the contents of two registers Rm and Rs and stores the lower 32 bits of the
 /// result in Rd
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Multiply {
     /// if true, add contents of Rn to the product before storing in Rd
     pub accumulate: bool,

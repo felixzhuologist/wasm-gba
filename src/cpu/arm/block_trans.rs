@@ -3,7 +3,7 @@ use ::cpu::status_reg::{CPUMode, InstructionSet};
 use ::util;
 
 /// Load or store any subset of the currently visible registers
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockDataTransfer {
     /// if true, add offset before transfer else add after
     pub pre_index: bool,
