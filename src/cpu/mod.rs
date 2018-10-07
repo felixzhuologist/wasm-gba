@@ -53,6 +53,22 @@ impl CPUWrapper {
         }
     }
 
+    /// Initialize CPU assuming direct boot without the BIOS (i.e. with values
+    /// set as if the BIOS has already run): the PC is set to the start of ROM,
+    /// and the CPU is in SYS mode with FIQ bit set
+    pub const fn new_direct_boot() -> CPUWrapper {
+        CPUWrapper {
+            cpu: CPU::new(),
+            pipeline: [
+                PipelineInstruction::Empty,
+                PipelineInstruction::Empty,
+                PipelineInstruction::Empty,
+            ],
+            idx: 0,
+            last_instruction: None
+        }
+    }
+
     /// Run for a full refresh cycle. Does not actually draw the framebuffer
     pub fn frame(&mut self) {
         self.vdraw();
@@ -85,9 +101,12 @@ impl CPUWrapper {
         self.cpu.mem.graphics.disp_stat.is_hblank = false;
         let mut cycles = 0u32;
         let mut col = 0;
-        while cycles < (DRAW_WIDTH * CYCLES_PER_PIXEL) {
+        while col < DRAW_WIDTH {
             cycles += self.step();
             for _ in 0..((cycles - col*CYCLES_PER_PIXEL) / CYCLES_PER_PIXEL) {
+                if col >= DRAW_WIDTH {
+                    break;
+                }
                 self.cpu.mem.update_pixel(row, col);
                 col += 1;
             }
@@ -235,6 +254,28 @@ impl CPU {
             r_svc: [0; 2],
 
             cpsr: PSR::new(),
+            spsr_svc: PSR::new(),
+            spsr_abt: PSR::new(),
+            spsr_und: PSR::new(),
+            spsr_irq: PSR::new(),
+            spsr_fiq: PSR::new(),
+
+            should_flush: false,
+
+            mem: mem::Memory::new(),
+        }
+    }
+
+    pub const fn new_direct_boot() -> CPU {
+        CPU {
+            r: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000],
+            r_fiq: [0; 7],
+            r_irq: [0x3007FA0, 0],
+            r_und: [0; 2],
+            r_abt: [0; 2],
+            r_svc: [0x3007FA0, 0],
+
+            cpsr: PSR::new_direct_boot(),
             spsr_svc: PSR::new(),
             spsr_abt: PSR::new(),
             spsr_und: PSR::new(),

@@ -60,6 +60,16 @@ pub fn get_bios() -> *const u8 {
 }
 
 #[wasm_bindgen]
+pub fn get_bg_palette() -> *const u8 {
+    unsafe { &GBA.cpu.mem.palette.bg as *const u32 as *const u8 }
+}
+
+#[wasm_bindgen]
+pub fn get_sprite_palette() -> *const u8 {
+    unsafe { &GBA.cpu.mem.palette.sprite as *const u32 as *const u8 }
+}
+
+#[wasm_bindgen]
 pub fn step() {
     unsafe { GBA.step(); }
 }

@@ -25,10 +25,10 @@ impl Memory {
     /// backgrounds in order of priority; if there no objects at this pixel then
     /// use the first background palette color as a fallback
     pub fn update_pixel(&mut self, row: u32, col: u32) {
-        self.framebuffer.pixels[row as usize][col as usize] = (0..4)
-            .filter_map(|i| self.by_priority(i, row, col))
-            .next()
-            .unwrap_or(self.palette.bg[0])
+        // self.framebuffer.pixels[row as usize][col as usize] = (0..4)
+        //     .filter_map(|i| self.by_priority(i, row, col))
+        //     .next()
+        //     .unwrap_or(self.palette.bg[0])
     }
 
     fn by_priority(&self, priority: u8, row: u32, col: u32) -> Option<u32> {

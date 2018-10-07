@@ -5,3 +5,17 @@ body {
 .container {
     max-width: 60%;
 }
+
+.palette-grid {
+    padding: 0;
+    display: flex;
+    width: 160px;
+    flex-wrap: wrap;
+}
+
+.palette-item {
+    width: 10px;
+    height: 10px;
+    border-style: solid;
+    border-width: 1px;
+}

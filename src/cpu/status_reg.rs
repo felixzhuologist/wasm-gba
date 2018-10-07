@@ -81,6 +81,19 @@ impl PSR {
         }
     }
 
+    pub const fn new_direct_boot() -> PSR {
+        PSR {
+            neg: false,
+            zero: false,
+            carry: false,
+            overflow: false,
+            irq: false,
+            fiq: true,
+            isa: InstructionSet::ARM,
+            mode: CPUMode::SYS,
+        }
+    }
+
     pub fn to_u32(&self) -> u32 {
         ((self.neg as u32) << 31) |
         ((self.zero as u32) << 30) |

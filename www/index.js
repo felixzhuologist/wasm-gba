@@ -11,6 +11,8 @@ const thumbd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
 let dis = armd;
 
 let bios_ptr = VM.get_bios();
+let bg_palette_ptr = VM.get_bg_palette();
+let sprite_palette_ptr = VM.get_bg_palette();
 let rom;
 let buf8 = new Uint8Array(memory.buffer);
 
@@ -49,6 +51,8 @@ const get_flag = (on, char) => on ? char : '-'
 
 const update_shared_mem = () => {
     bios_ptr = VM.get_bios();
+    bg_palette_ptr = VM.get_bg_palette();
+    sprite_palette_ptr = VM.get_bg_palette();
     buf8 = new Uint8Array(memory.buffer);
 }
 
@@ -121,6 +125,18 @@ const dumpState = () => {
     }
 }
 
+const showPalette = (id, ptr) => {
+    $(id).empty();
+    for (let i = 0; i < 256; i++) {
+        let red = buf8[ptr + i*4];
+        let green = buf8[ptr + i*4 + 1];
+        let blue = buf8[ptr + i*4 + 2];
+        let color = `rgb(${red}, ${green}, ${blue})`;
+        $(id).append(
+            `<div class="palette-item" style="background-color: ${color}"></div>`)
+    }
+}
+
 const step = () => {
     VM.step();
     dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
@@ -131,6 +147,8 @@ const frame = () => {
     VM.frame();
     dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
+    showPalette("#bg-palette", bg_palette_ptr);
+    showPalette("#sprite-palette", sprite_palette_ptr);
 }
 
 const run_until_break = (breakpoint) => {
