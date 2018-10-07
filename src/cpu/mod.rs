@@ -17,10 +17,12 @@ use mem;
 use util;
 
 pub const CYCLES_PER_PIXEL: u32 = 4;
-pub const DRAW_WIDTH: u32 = 240;
-pub const BLANK_WIDTH: u32 = 68;
-pub const DRAW_HEIGHT: u32 = 160;
-pub const BLANK_HEIGHT: u32 = 68;
+pub const HDRAW: u32 = 240 * CYCLES_PER_PIXEL;
+pub const HBLANK: u32 = 68 * CYCLES_PER_PIXEL;
+pub const SCANLINE: u32 = HDRAW + HBLANK;
+pub const VDRAW: u32 = 160 * SCANLINE;
+pub const VBLANK: u32 = 68 * SCANLINE;
+pub const REFRESH: u32 = VDRAW + VBLANK;
 
 /// A wrapper structs that keeps the inner CPU and pipeline in separate fields
 /// to allow for splitting the borrow when executing an instruction
@@ -34,6 +36,8 @@ pub struct CPUWrapper {
     // index into the circular buffer
     idx: usize,
     pub last_instruction: Option<Instruction>,
+    /// number of run cycles so far mod refresh rate
+    pub cycles: u32,
 }
 
 impl CPUWrapper {
@@ -49,7 +53,8 @@ impl CPUWrapper {
                 PipelineInstruction::Empty,
             ],
             idx: 0,
-            last_instruction: None
+            last_instruction: None,
+            cycles: 0,
         }
     }
 
@@ -65,69 +70,24 @@ impl CPUWrapper {
                 PipelineInstruction::Empty,
             ],
             idx: 0,
-            last_instruction: None
+            last_instruction: None,
+            cycles: 0,
         }
     }
 
-    /// Run for a full refresh cycle. Does not actually draw the framebuffer
+    /// Run until the next frame refresh cycle starts
     pub fn frame(&mut self) {
-        self.vdraw();
-        self.vblank();
-    }
-
-    pub fn vdraw(&mut self) {
-        self.cpu.mem.graphics.disp_stat.is_vblank = false;
-        for row in 0..DRAW_HEIGHT {
-            self.scanline(row);
-            self.cpu.mem.on_vcount_hook(row);
-        }
-    }
-
-    pub fn vblank(&mut self) {
-        self.cpu.mem.on_vblank_hook();
-        for row in 0..BLANK_HEIGHT {
-            self.run_n_cycles(DRAW_WIDTH * CYCLES_PER_PIXEL);
-            self.hblank();
-            self.cpu.mem.on_vcount_hook(row + DRAW_HEIGHT);
-        }
-    }
-
-    pub fn scanline(&mut self, row: u32) {
-        self.hdraw(row);
-        self.hblank();
-    }
-
-    pub fn hdraw(&mut self, row: u32) {
-        self.cpu.mem.graphics.disp_stat.is_hblank = false;
-        let mut cycles = 0u32;
-        let mut col = 0;
-        while col < DRAW_WIDTH {
-            cycles += self.step();
-            for _ in 0..((cycles - col*CYCLES_PER_PIXEL) / CYCLES_PER_PIXEL) {
-                if col >= DRAW_WIDTH {
-                    break;
-                }
-                self.cpu.mem.update_pixel(row, col);
-                col += 1;
+        loop {
+            if self.step() {
+                break;
             }
         }
     }
 
-    pub fn hblank(&mut self) {
-        self.cpu.mem.on_hblank_hook();
-        self.run_n_cycles(BLANK_WIDTH * CYCLES_PER_PIXEL);
-    }
-
-    pub fn run_n_cycles(&mut self, cycles: u32) {
-        let mut cycles_run = 0;
-        while cycles_run < cycles {
-            cycles_run += self.step();
-        }
-    }
-
     /// Run a single fetch/decode/execute cycle in the instruction pipeline,
-    /// and check for DMA/interrupts
-    pub fn step(&mut self) -> u32 {
+    /// and check for DMA/interrupts. Returns true if a new refresh cycle
+    /// has started
+    pub fn step(&mut self) -> bool {
         self.fetch();
         self.decode();
         let cycles = self.execute();
@@ -142,7 +102,30 @@ impl CPUWrapper {
 
         self.cpu.mem.check_dma(mem::io::dma::TimingMode::Now);
         self.cpu.check_interrupts();
-        cycles
+        
+        let before = self.cycles;
+        for _ in 0..cycles {
+            let row = self.cycles / SCANLINE;
+            let col = self.cycles % SCANLINE;
+            match col {
+                0 => {
+                    self.cpu.mem.graphics.disp_stat.is_hblank = false;
+                    self.cpu.mem.on_vcount_hook(cycles / SCANLINE);
+                },
+                HDRAW => { self.cpu.mem.on_hblank_hook(); },
+                _ => (),
+            }
+            match self.cycles {
+                0 => { self.cpu.mem.graphics.disp_stat.is_vblank = false; }
+                VDRAW => { self.cpu.mem.on_vblank_hook(); },
+                _ => (),
+            }
+            if self.cycles % 4 == 0 {
+                self.cpu.mem.update_pixel(row, col);
+            }
+            self.cycles = (self.cycles + 1) % REFRESH;
+        }
+        before > self.cycles
     }
 
     pub fn fetch(&mut self) {

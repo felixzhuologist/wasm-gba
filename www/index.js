@@ -123,6 +123,9 @@ const dumpState = () => {
     } catch(err) {
         console.error(err);
     }
+
+    showPalette("#bg-palette", bg_palette_ptr);
+    showPalette("#sprite-palette", sprite_palette_ptr);
 }
 
 const showPalette = (id, ptr) => {
@@ -147,8 +150,6 @@ const frame = () => {
     VM.frame();
     dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
-    showPalette("#bg-palette", bg_palette_ptr);
-    showPalette("#sprite-palette", sprite_palette_ptr);
 }
 
 const run_until_break = (breakpoint) => {
@@ -156,7 +157,7 @@ const run_until_break = (breakpoint) => {
     let started = false;
     while (!started || (VM.get_register(15) !== breakpoint)) {
         started = true;
-        if (steps > 10000) { // don't hang indefinitely
+        if (steps > 100000) { // don't hang indefinitely
             break;
         }
         VM.step();
