@@ -14,3 +14,7 @@ pub const OAM_START: u32 = 0x07000000;
 pub const OAM_END: u32 = 0x070003FF;
 pub const ROM_START: u32 = 0x08000000;
 pub const ROM_END: u32 = 0x09FFFFFF;
+pub const ROM_MIRROR1_START: u32 = 0xA000000;
+pub const ROM_MIRROR1_END: u32 = 0xBFFFFFF;
+pub const ROM_MIRROR2_START: u32 = 0xC000000;
+pub const ROM_MIRROR2_END: u32 = 0xDFFFFFF;

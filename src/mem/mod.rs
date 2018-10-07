@@ -21,8 +21,12 @@ pub struct Memory {
     pub palette: palette::Palette,
 
     // waitstates for reading from ROM, can be configured by writing to REG_WSCNT
+    /// waitstates for a non sequential read from ROM
     rom_n_cycle: u8,
-    rom_s_cycle: u8,
+    /// if true, sequential reads from ROM are fast and otherwise they are slow.
+    /// fast will always be 1 cycle but the number of cycles for a slow sequential
+    /// read depends on which mirror data is being read from
+    rom_s_cycle_fast: bool,
 
     pub framebuffer: framebuffer::FrameBuffer,
 }
@@ -37,7 +41,7 @@ impl Memory {
             sprites: oam::Sprites::new(),
             palette: palette::Palette::new(),
             rom_n_cycle: 4,
-            rom_s_cycle: 2,
+            rom_s_cycle_fast: false,
             framebuffer: framebuffer::FrameBuffer::new(),
         }
     }
@@ -160,7 +164,23 @@ impl Memory {
                 if drawing { 1 } else { 0 }
             }
             ROM_START...ROM_END =>
-                if first_access { self.rom_n_cycle } else { self.rom_s_cycle },
+                if first_access {
+                    self.rom_n_cycle
+                } else {
+                    if self.rom_s_cycle_fast { 1 } else { 2 }
+                },
+            ROM_MIRROR1_START...ROM_MIRROR1_END =>
+                if first_access {
+                    self.rom_n_cycle
+                } else {
+                    if self.rom_s_cycle_fast { 1 } else { 4 }
+                },
+            ROM_MIRROR2_START...ROM_MIRROR2_END =>
+                if first_access {
+                    self.rom_n_cycle
+                } else {
+                    if self.rom_s_cycle_fast { 1 } else { 8 }
+                },
             _ => 0,
         };
         (1 + waitstates).into()
@@ -238,8 +258,10 @@ impl RawMemory {
             VRAM_START...VRAM_END => (&self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&self.oam, addr - OAM_START),
             ROM_START...ROM_END => (self.rom.unwrap(), addr - ROM_START),
-            0x0A000000...0x0BFFFFFF => unimplemented!(),
-            0x0C000000...0x0DFFFFFF => unimplemented!(),
+            ROM_MIRROR1_START...ROM_MIRROR1_END =>
+                (self.rom.unwrap(), addr - ROM_MIRROR1_START),
+            ROM_MIRROR2_START...ROM_MIRROR2_END =>
+                (self.rom.unwrap(), addr - ROM_MIRROR2_START),
             0x0E000000...0x0E00FFFF => unimplemented!(),
             _ => { return None; }
         };
@@ -256,9 +278,7 @@ impl RawMemory {
             PAL_START...PAL_END => (&mut self.pal, addr - PAL_START),
             VRAM_START...VRAM_END => (&mut self.vram, addr - VRAM_START),
             OAM_START...OAM_END => (&mut self.oam, addr - OAM_START),
-            ROM_START...ROM_END => panic!("trying to write to ROM"),
-            0x0A000000...0x0BFFFFFF => unimplemented!(),
-            0x0C000000...0x0DFFFFFF => unimplemented!(),
+            ROM_START...ROM_MIRROR2_END => panic!("trying to write to ROM"),
             0x0E000000...0x0E00FFFF => unimplemented!(),
             _ => { return None; }
         };
@@ -267,16 +287,25 @@ impl RawMemory {
 
     pub fn get_byte(&self, addr: u32) -> u8 {
         let (segment, idx) = self.get_loc(addr).unwrap();
+        if idx >= segment.len() {
+            return 0;
+        }
         segment[idx]
     }
 
     pub fn get_halfword(&self, addr: u32) -> u16 {
         let (segment, idx) = self.get_loc(addr).unwrap();
+        if idx >= segment.len() - 1 {
+            return 0;
+        }
         segment[idx] as u16 | (segment[idx + 1] as u16) << 8
     }
 
     pub fn get_word(&self, addr: u32) -> u32 {
         let (segment, idx) = self.get_loc(addr).unwrap();
+        if idx >= segment.len() - 3 {
+            return 0;
+        }
         segment[idx] as u32 |
             (segment[idx + 1] as u32) << 8 |
             (segment[idx + 2] as u32) << 16 |

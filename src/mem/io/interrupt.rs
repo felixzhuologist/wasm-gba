@@ -106,7 +106,7 @@ impl Memory {
                     3 => 8,
                     _ => panic!("should not get here")
                 };
-                self.rom_s_cycle = if (val >> 4) & 1 == 1 { 1 } else { 2 };
+                self.rom_s_cycle_fast = (val >> 4) & 1 == 1;
             }
             _ => ()
         }
@@ -222,7 +222,7 @@ mod test {
 
         mem.set_byte(0x4000204, 0b1011_0100);
         assert_eq!(mem.rom_n_cycle, 3);
-        assert_eq!(mem.rom_s_cycle, 1);
+        assert_eq!(mem.rom_s_cycle_fast, true);
     }
 
     #[test]
