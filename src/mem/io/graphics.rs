@@ -1,14 +1,3 @@
-//! Background modes:
-//!     tile modes:
-//! 0: 4 tile layers (bg0 - bg3)
-//! 1: 2 tile layers + 1 rotates/scaled tile layer (bg0 - bg2)
-//! 2: 2 rotated/scaled tile layers (bg2, bg3)
-//!     bitmap modes (all use bg 2):
-//! 3: 240x160 15 bit bitmap with no page flip
-//! 4: 240x160 8 bit bitmap with page flip. the 8 bits here are an index into
-//!    the background palette at 0x5000000
-//! 5: 160x128 15 bit bitmap with page flip
-
 use super::addrs::*;
 use mem::Memory;
 // use core::cmp::min;
@@ -19,28 +8,28 @@ use util;
 /// The data in this struct is a mirror of the data from addresses
 /// 0x4000000 - 0x4000060
 pub struct LCD {
-    disp_cnt: DispCnt,
+    pub disp_cnt: DispCnt,
     pub disp_stat: DispStat,
     /// Stores the current Y location of the current line being drawn
     pub vcount: u8,
-    bg_cnt: [BgCnt; 4],
-    bg_offset_x: [u16; 4],
-    bg_offset_y: [u16; 4],
-    bg_affine: [BgAffineParams; 2],
+    pub bg_cnt: [BgCnt; 4],
+    pub bg_offset_x: [u16; 4],
+    pub bg_offset_y: [u16; 4],
+    pub bg_affine: [BgAffineParams; 2],
 
-    window_coords: [WindowCoords; 2],
+    pub window_coords: [WindowCoords; 2],
     // win0 inside, win1 inside, win0 outside, win1 outside
-    window_settings: [WindowSettings; 4],
+    pub window_settings: [WindowSettings; 4],
 
-    bg_mos_hsize: u8,
-    bg_mos_vsize: u8,
-    obj_mos_hsize: u8,
-    obj_mos_vsize: u8,
-    blend_params: BlendParams,
+    pub bg_mos_hsize: u8,
+    pub bg_mos_vsize: u8,
+    pub obj_mos_hsize: u8,
+    pub obj_mos_vsize: u8,
+    pub blend_params: BlendParams,
 
-    alpha_a_coef: f32,
-    alpha_b_coef: f32,
-    brightness_coef: f32,
+    pub alpha_a_coef: f32,
+    pub alpha_b_coef: f32,
+    pub brightness_coef: f32,
 }
 
 impl LCD {
@@ -273,16 +262,16 @@ impl Memory {
 /// 3   (C) = Game Boy Color mode. Read only - should stay at 0.
 /// D   (U) = Enable Window 0
 /// E   (V) = Enable Window 1
-struct DispCnt {
+pub struct DispCnt {
     /// 0-2 (M) = The video mode
-    bg_mode: u8,
+    pub bg_mode: u8,
     /// 4   (A) = This bit controls the starting address of the bitmap in bitmapped modes
     ///           (mode 4 and 5) and is used for page flipping (the user can update
     ///            one of the frames while display the other, then switch)
-    frame_base: u32,
+    pub frame_base: u32,
     /// 5   (B) = if set, allow access to access VRAM/OAM/PAL sections of memory
     ///           during HBlank
-    hblank_interval_free: bool,
+    pub hblank_interval_free: bool,
     /// 6   (D) = Sets whether sprites stored in VRAM use 1 dimension or 2.
     ///           1 - 1d: tiles are are stored sequentially
     ///           0 - 2d: each row of tiles is stored 32 x 64 bytes in from the start of the
@@ -293,13 +282,13 @@ struct DispCnt {
     ///           built up
     // force_blank: bool,
     /// 8-B (L) = enable the display of BGi
-    bg_enabled: [bool; 4],
+    pub bg_enabled: [bool; 4],
     /// C   (S) = If set, enable display of OAM (sprites).
     // oam_enabled: bool,
     /// D-E (U) = enable the display of window i
-    window_enabled: [bool; 2],
+    pub window_enabled: [bool; 2],
     /// F   (W) = Enable Sprite Windows
-    obj_win_enabled: bool,
+    pub obj_win_enabled: bool,
 }
 
 impl DispCnt {
@@ -355,31 +344,31 @@ impl DispStat {
 /// Address: 0x400008 - 0x40001E: Background Registers
 /// F E D C  B A 9 8  7 6 5 4  3 2 1 0
 /// Z Z V M  M M M M  A C X X  S S P P
-struct BgCnt {
+pub struct BgCnt {
     /// 0-1 (P) = Priority - 0 highest, 3 is the lowest
     ///           When multiple backgrounds have the same priority, the order
     ///           from front to back is:  BG0, BG1, BG2, BG3.  Sprites of the same
     ///           priority are ordered similarly, with the first sprite in OAM
     ///           appearing in front.
-    priority: u8,
+    pub priority: u8,
     /// 2-3 (S) = Starting address of character tile data
     ///           Address = 0x6000000 + S * 0x4000
-    tile_addr: u32,
+    pub tile_addr: u32,
     /// 6   (C) = Mosiac effect - 1 on, 0 off
-    mosaic_enabled: bool,
+    pub mosaic_enabled: bool,
     /// 7   (A) = Color palette type -
     ///           1 - standard 256 color pallete
     ///           0 - each tile uses one of 16 different 16 color palettes (no effect on
     ///               rotates/scale backgrounds, which are always 256 color)
-    depth: u8,
+    pub depth: u8,
     /// 8-C (M) = Starting address of character tile map
     ///           Address = 0x6000000 + M * 0x800
-    map_addr: u32,
+    pub map_addr: u32,
     /// D   (V) = Screen Over. Used to determine whether rotational backgrounds get tiled
     ///           repeatedly at the edges or are displayed as a single "tile" with the area
     ///           outside transparent. This is forced to 0 (read only) for backgrounds
     ///           0 and 1 (only).
-    overflow: bool,
+    pub overflow: bool,
     /// E-F (Z) = Size of tile map
     ///           For "text" backgrounds:
     ///           00 : 256x256 (32x32 tiles)
@@ -392,8 +381,8 @@ struct BgCnt {
     ///           01 : 256x256 (32x32 tiles)
     ///           10 : 512x512 (64x64 tiles)
     ///           11 : 1024x1024 (128x128 tiles)
-    width: u16,
-    height: u16,
+    pub width: u16,
+    pub height: u16,
 }
 
 impl BgCnt {
@@ -411,13 +400,13 @@ impl BgCnt {
     }
 }
 
-struct BgAffineParams {
-    dx: f32,
-    dmx: f32,
-    dy: f32,
-    dmy: f32,
-    ref_x: f32,
-    ref_y: f32,
+pub struct BgAffineParams {
+    pub dx: f32,
+    pub dmx: f32,
+    pub dy: f32,
+    pub dmy: f32,
+    pub ref_x: f32,
+    pub ref_y: f32,
 }
 
 impl BgAffineParams {
@@ -435,11 +424,11 @@ impl BgAffineParams {
 
 /// Specifies the corners of a window. Note that the upper number is exclusive
 /// and the lower number is inclusive (i.e. x in [left, right))
-struct WindowCoords {
-    top: u8,
-    bottom: u8,
-    left: u8,
-    right: u8,
+pub struct WindowCoords {
+    pub top: u8,
+    pub bottom: u8,
+    pub left: u8,
+    pub right: u8,
 }
 
 impl WindowCoords {
@@ -453,7 +442,7 @@ impl WindowCoords {
     }
 }
 
-struct WindowSettings {
+pub struct WindowSettings {
     pub bg: [bool; 4],
     pub sprite: bool,
     pub blend: bool,
@@ -469,7 +458,7 @@ impl WindowSettings {
     }
 }
 
-struct BlendParams {
+pub struct BlendParams {
     // bg0-bg3, sprite, backdrop
     pub source: [bool; 6],
     pub mode: BlendType,
@@ -488,7 +477,7 @@ impl BlendParams {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum BlendType {
+pub enum BlendType {
     Off,
     AlphaBlend,
     Lighten,

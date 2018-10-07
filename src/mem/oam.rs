@@ -17,8 +17,8 @@ pub const NUM_AFFFINE_SPRITES: usize = 32;
 /// belong to? That's indicated by the affine_group field on a Sprite, which
 /// is an index into affine_params
 pub struct Sprites {
-    sprites: [Sprite; NUM_SPRITES],
-    affine_params: [SpriteAffineParams; NUM_AFFFINE_SPRITES],
+    pub sprites: [Sprite; NUM_SPRITES],
+    pub affine_params: [SpriteAffineParams; NUM_AFFFINE_SPRITES],
 }
 
 impl Memory {
@@ -27,7 +27,10 @@ impl Memory {
         let sprite = &mut self.sprites.sprites[sprite_num as usize];
         match addr % BYTES_PER_OAM_ENTRY {
             // attribute 0 (lo)
-            0 => { sprite.y = val; },
+            0 => {
+                sprite.y = val;
+                sprite.update_boundaries();
+            },
             // attribute 0 (hi)
             // F E D C  B A 9 8
             // S S A M  T T D D
@@ -40,6 +43,7 @@ impl Memory {
                 sprite.mode = SpriteType::from_u8(val & 0b11).unwrap();
                 sprite.bit_depth = if (val & 0x20) == 0x20 { 8 } else { 4 };
                 sprite.shape = (val >> 6) & 0b11;
+                sprite.update_boundaries();
             },
             // attribute 1:
             // F E D C  B A 9 8  7 6 5 4  3 2 1 0
@@ -59,6 +63,7 @@ impl Memory {
                 sprite.vflip = util::get_bit_hw(attr1, 13);
                 sprite.size = (attr1 >> 14) as u8;
                 sprite.affine_group = ((attr1 >> 9) & 0b11111) as u8;
+                sprite.update_boundaries();
             },
             // attribute 2:
             // F E D C  B A 9 8  7 6 5 4  3 2 1 0
@@ -111,43 +116,51 @@ impl Sprites {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Sprite {
     /// the x coordinate: for regular sprites, this is the upper left corner
-    /// and for affine sprites this is the cneter
-    x: u16,
+    /// and for affine sprites this is the center. this is a signed 9 bit value
+    pub x: u16,
     /// the y coordinate: for regular sprites, this is the upper left corner
-    /// and for affine sprites this is the cneter
-    y: u8,
+    /// and for affine sprites this is the center. this is a signed 8 bit value
+    pub y: u8,
     /// the shape and size together determine the dimensions of the sprite
     /// they are both 2 bit values
-    shape: u8,
-    size: u8,
+    pub shape: u8,
+    pub size: u8,
 
     /// Indicates whether we are using a full 256 color palette, or 16 subpalettes
-    bit_depth: u8,
+    pub bit_depth: u8,
     /// only valid when bit depth is 4: index of the sub palette
-    palette_number: u8,
+    pub palette_number: u8,
 
     /// specifies the OAM_AFF_ENTY this sprite uses. only valid for affine sprites
-    affine_group: u8,
+    pub affine_group: u8,
     /// for affine sprites, this being set means that this sprite uses double
     /// the rendering area. for normal sprites, this hides the sprite
     /// defines what kind of sprite this is
-    mode: SpriteType,
+    pub mode: SpriteType,
 
     /// flip the entire sprite vertically. only valid for regular sprites
-    vflip: bool,
+    pub vflip: bool,
     /// flip the entire sprite horizontally. only valid for regular sprites
-    hflip: bool,
+    pub hflip: bool,
 
     /// higher priorities get drawn first; sprites cover backgrounds of the same
     /// priority and when sprites have the same priority, higher in the OAM gets
     /// drawn first
-    priority: u8,
+    pub priority: u8,
     /// base tile index of the sprite
-    tile_number: u16,
+    pub tile_number: u16,
 
     // TODO: implement effects
     // gfx_mode: GfxMode,
     // mosaic_enabled: bool,
+
+    // derived attributes:
+    pub left: i16,
+    pub right: i16,
+    pub top: i16,
+    pub bottom: i16,
+    pub width: u8,
+    pub height: u8,
 }
 
 impl Sprite {
@@ -165,13 +178,17 @@ impl Sprite {
             hflip: false,
             priority: 0,
             tile_number: 0,
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 0,
+            height: 0,
         }
     }
 
-    // TODO: store width/height as attributes?
-    /// return width and height of this sprite
-    pub fn dimensions(&self) -> (u8, u8) {
-        match (self.shape, self.size) {
+    pub fn update_boundaries(&mut self) {
+        let (width, height) = match (self.shape, self.size) {
             (0, 0) => (8, 8),
             (0, 1) => (16, 16),
             (0, 2) => (32, 32),
@@ -185,16 +202,25 @@ impl Sprite {
             (2, 2) => (16, 32),
             (2, 3) => (32, 64),
             _ => panic!("invalid shape/size combo")
-        }
+        };
+        self.width = width;
+        self.height = height;
+
+        // TODO: figure out sprite boundaries
+        self.top = 0;
+        self.bottom = 0;
+
+        self.left = 0;
+        self.right = 0;
     }
 }
 
 #[derive(Copy, Clone, Debug)]
-struct SpriteAffineParams {
-    dx: f32,
-    dmx: f32,
-    dy: f32,
-    dmy: f32,
+pub struct SpriteAffineParams {
+    pub dx: f32,
+    pub dmx: f32,
+    pub dy: f32,
+    pub dmy: f32,
 }
 
 impl SpriteAffineParams {
@@ -253,7 +279,7 @@ mod test {
             assert_eq!(sprite.tile_number, 0b10_0010_1111);
             assert_eq!(sprite.priority, 1);
             assert_eq!(sprite.palette_number, 0b0101);
-            assert_eq!(sprite.dimensions(), (32, 64));
+            assert_eq!((sprite.width, sprite.height), (32, 64));
         }
 
         mem.set_halfword(0x70003F8, 0b0001_0001_1000_1001);
@@ -272,7 +298,7 @@ mod test {
             assert_eq!(sprite.tile_number, 0b11_0001_0001);
             assert_eq!(sprite.priority, 0);
             assert_eq!(sprite.palette_number, 0b1100);
-            assert_eq!(sprite.dimensions(), (16, 16));
+            assert_eq!((sprite.width, sprite.height), (16, 16));
         }
 
         mem.set_halfword(0x70003E6, 0x0A00);
