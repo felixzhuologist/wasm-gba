@@ -24,6 +24,7 @@
 use super::addrs::*;
 use mem::Memory;
 
+#[derive(Debug)]
 pub struct Interrupt {
     pub master_enabled: bool,
     pub enabled: InterruptBitmap,
@@ -49,7 +50,7 @@ impl Interrupt {
             .zip(self.triggered.as_array().iter())
             .filter(|(enabled, triggered)| **enabled && **triggered)
             .peekable()
-            .peek()
+            .next()
             .is_some()
     }
 }
@@ -78,25 +79,27 @@ impl Memory {
                 enabled.keypad = get_bit(val, 4);
                 enabled.gamepak = get_bit(val, 5);
             },
-            // we XOR to emulate the fact that writing a 1 to a triggered
-            // interrupt acknowledges/clears it
+            // writing a 1 to a triggered interrupt should acknowledge it but
+            // any other combination should leave bits unchanged.
+            // NOTE this means that when the emulator sets an interrupt bit in
+            // raw mem it should do so directly instead of using a set() method
             IF_LO => {
-                triggered.vblank ^= get_bit(val, 0);
-                triggered.hblank ^= get_bit(val, 1);
-                triggered.vcount ^= get_bit(val, 2);
-                triggered.timer[0] ^= get_bit(val, 3);
-                triggered.timer[1] ^= get_bit(val, 4);
-                triggered.timer[2] ^= get_bit(val, 5);
-                triggered.timer[3] ^= get_bit(val, 6);
-                triggered.serial ^= get_bit(val, 7);
+                triggered.vblank &= !get_bit(val, 0);
+                triggered.hblank &= !get_bit(val, 1);
+                triggered.vcount &= !get_bit(val, 2);
+                triggered.timer[0] &= !get_bit(val, 3);
+                triggered.timer[1] &= !get_bit(val, 4);
+                triggered.timer[2] &= !get_bit(val, 5);
+                triggered.timer[3] &= !get_bit(val, 6);
+                triggered.serial &= !get_bit(val, 7);
             },
             IF_HI => {
-                triggered.dma[0] ^= get_bit(val, 0);
-                triggered.dma[1] ^= get_bit(val, 1);
-                triggered.dma[2] ^= get_bit(val, 2);
-                triggered.dma[3] ^= get_bit(val, 3);
-                triggered.keypad ^= get_bit(val, 4);
-                triggered.gamepak ^= get_bit(val, 5);
+                triggered.dma[0] &= !get_bit(val, 0);
+                triggered.dma[1] &= !get_bit(val, 1);
+                triggered.dma[2] &= !get_bit(val, 2);
+                triggered.dma[3] &= !get_bit(val, 3);
+                triggered.keypad &= !get_bit(val, 4);
+                triggered.gamepak &= !get_bit(val, 5);
             },
             WSCNT_LO => {
                 self.rom_n_cycle = match (val >> 2) & 0b11 {
@@ -123,6 +126,7 @@ impl Memory {
     }
 }
 
+#[derive(Debug)]
 pub struct InterruptBitmap {
     pub vblank: bool,
     pub hblank: bool,
@@ -201,25 +205,6 @@ mod test {
             assert_eq!(enabled.gamepak, true);
         }
 
-        mem.set_halfword(0x4000202, 0b0000_1100_0000_1010);
-        {
-            let triggered = &mem.int.triggered;
-            assert_eq!(triggered.vblank, false);
-            assert_eq!(triggered.hblank, true);
-            assert_eq!(triggered.vcount, false);
-            assert_eq!(triggered.timer[0], true);
-            assert_eq!(triggered.timer[1], false);
-            assert_eq!(triggered.timer[2], false);
-            assert_eq!(triggered.timer[3], false);
-            assert_eq!(triggered.serial, false);
-            assert_eq!(triggered.dma[0], false);
-            assert_eq!(triggered.dma[1], false);
-            assert_eq!(triggered.dma[2], true);
-            assert_eq!(triggered.dma[3], true);
-            assert_eq!(triggered.keypad, false);
-            assert_eq!(triggered.gamepak, false);
-        }
-
         mem.set_byte(0x4000204, 0b1011_0100);
         assert_eq!(mem.rom_n_cycle, 3);
         assert_eq!(mem.rom_s_cycle_fast, true);
@@ -228,24 +213,13 @@ mod test {
     #[test]
     fn acknowledge_int() {
         let mut mem = Memory::new();
-        mem.set_halfword(0x4000202, 0b0000_1100_0000_1010);
-        {
-            let triggered = &mem.int.triggered;
-            assert_eq!(triggered.vblank, false);
-            assert_eq!(triggered.hblank, true);
-            assert_eq!(triggered.vcount, false);
-            assert_eq!(triggered.timer[0], true);
-            assert_eq!(triggered.timer[1], false);
-            assert_eq!(triggered.timer[2], false);
-            assert_eq!(triggered.timer[3], false);
-            assert_eq!(triggered.serial, false);
-            assert_eq!(triggered.dma[0], false);
-            assert_eq!(triggered.dma[1], false);
-            assert_eq!(triggered.dma[2], true);
-            assert_eq!(triggered.dma[3], true);
-            assert_eq!(triggered.keypad, false);
-            assert_eq!(triggered.gamepak, false);
-        }
+
+        mem.raw.io[0x202] = 0b0000_1010;
+        mem.raw.io[0x203] = 0b0000_1100;
+        mem.int.triggered.hblank = true;
+        mem.int.triggered.timer[0] = true;
+        mem.int.triggered.dma[2] = true;
+        mem.int.triggered.dma[3] = true;
 
         // acknowledge hblank and timer[0]
         mem.set_halfword(0x4000202, 0b0000_0000_0000_1010);
