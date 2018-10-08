@@ -15,6 +15,7 @@ use self::pipeline::{
 };
 use mem;
 use util;
+use std;
 
 pub const CYCLES_PER_PIXEL: u32 = 4;
 pub const HDRAW: u32 = 240 * CYCLES_PER_PIXEL;
@@ -180,16 +181,18 @@ impl CPUWrapper {
 
             let row = self.cycles / SCANLINE;
             let col = self.cycles % SCANLINE;
-            match col {
-                0 => {
-                    self.cpu.mem.graphics.disp_stat.is_hblank = false;
-                    self.cpu.mem.on_vcount_hook(row);
-                },
-                HDRAW => { self.cpu.mem.on_hblank_hook(); },
-                _ => (),
+            if row < 160 {
+                match col {
+                    0 => { self.cpu.mem.on_hdraw_hook(); },
+                    HDRAW => { self.cpu.mem.on_hblank_hook(); },
+                    _ => (),
+                }
+            }
+            if col == 0 {
+                self.cpu.mem.on_vcount_hook(std::cmp::min(row as u8, 160));
             }
             match self.cycles {
-                0 => { self.cpu.mem.graphics.disp_stat.is_vblank = false; }
+                0 => { self.cpu.mem.on_vdraw_hook(); }
                 VDRAW => { self.cpu.mem.on_vblank_hook(); },
                 _ => (),
             }

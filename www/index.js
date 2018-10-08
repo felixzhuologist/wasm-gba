@@ -53,7 +53,7 @@ const getFlag = (on, char) => on ? char : '-'
 const updateSharedMem = () => {
     bios_ptr = VM.get_bios();
     bg_palette_ptr = VM.get_bg_palette();
-    sprite_palette_ptr = VM.get_bg_palette();
+    sprite_palette_ptr = VM.get_sprite_palette();
     buf8 = new Uint8Array(memory.buffer);
 }
 

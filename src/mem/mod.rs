@@ -116,9 +116,16 @@ impl Memory {
         }
     }
 
+    pub fn on_vdraw_hook(&mut self) {
+        self.graphics.disp_stat.is_vblank = false;
+        self.raw.io[(DISPSTAT_LO - IO_START) as usize] &= !1;
+    }
+
     pub fn on_vblank_hook(&mut self) {
         self.graphics.disp_stat.is_vblank = true;
         self.graphics.disp_stat.is_hblank = false;
+        self.raw.io[(DISPSTAT_LO - IO_START) as usize] &= !3;
+        self.raw.io[(DISPSTAT_LO - IO_START) as usize] |= 1;
         if self.graphics.disp_stat.vblank_irq_enabled {
             self.int.triggered.vblank = true;
             self.raw.io[(IF_LO - IO_START) as usize] |= 1;
@@ -126,8 +133,14 @@ impl Memory {
         self.check_dma(TimingMode::VBlank);
     }
 
+    pub fn on_hdraw_hook(&mut self) {
+        self.graphics.disp_stat.is_hblank = false;
+        self.raw.io[(DISPSTAT_LO - IO_START) as usize] &= !2;
+    }
+
     pub fn on_hblank_hook(&mut self) {
         self.graphics.disp_stat.is_hblank = true;
+        self.raw.io[(DISPSTAT_LO - IO_START) as usize] |= 2;
         if self.graphics.disp_stat.hblank_irq_enabled {
             self.int.triggered.hblank = true;
             self.raw.io[(IF_LO  - IO_START) as usize] |= 0b10;
@@ -135,8 +148,9 @@ impl Memory {
         self.check_dma(TimingMode::HBlank);
     }
 
-    pub fn on_vcount_hook(&mut self, vcount: u32) {
+    pub fn on_vcount_hook(&mut self, vcount: u8) {
         self.graphics.update_vcount(vcount);
+        self.raw.io[(VCOUNT_LO - IO_START) as usize] = vcount;
         if self.graphics.disp_stat.vcount_triggered &&
             self.graphics.disp_stat.vcount_irq_enabled {
             self.int.triggered.vcount = true;

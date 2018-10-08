@@ -4,6 +4,7 @@ pub const DISPCNT_LO: u32 = 0x04000000;
 pub const DISPCNT_HI: u32 = 0x04000001;
 pub const DISPSTAT_LO: u32 = 0x04000004;
 pub const DISPSTAT_HI: u32 = 0x04000005;
+pub const VCOUNT_LO: u32 = 0x4000006;
 pub const BGCNT_START: u32 = 0x04000008;
 pub const BGCNT_END: u32 = 0x0400000F;
 pub const BG_OFFSET_START: u32 = 0x04000010;
