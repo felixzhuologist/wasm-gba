@@ -307,29 +307,18 @@ impl RawMemory {
 
     pub fn get_byte(&self, addr: u32) -> u8 {
         let (segment, idx) = self.get_loc(addr).unwrap_or((&[], 1));
-        if idx >= segment.len() {
-            return 0;
-        }
-        segment[idx]
+        if idx >= segment.len() { 0 } else { segment[idx] }
     }
 
     pub fn get_halfword(&self, addr: u32) -> u16 {
-        let (segment, idx) = self.get_loc(addr).unwrap_or((&[0], 1));
-        if idx >= segment.len() - 1 {
-            return 0;
-        }
-        segment[idx] as u16 | (segment[idx + 1] as u16) << 8
+        self.get_byte(addr) as u16 | (self.get_byte(addr + 1) as u16) << 8
     }
 
     pub fn get_word(&self, addr: u32) -> u32 {
-        let (segment, idx) = self.get_loc(addr).unwrap_or((&[0, 0, 0], 1));
-        if idx >= segment.len() - 3 {
-            return 0;
-        }
-        segment[idx] as u32 |
-            (segment[idx + 1] as u32) << 8 |
-            (segment[idx + 2] as u32) << 16 |
-            (segment[idx + 3] as u32) << 24
+        self.get_byte(addr) as u32 |
+            (self.get_byte(addr + 1) as u32) << 8 |
+            (self.get_byte(addr + 2) as u32) << 16 |
+            (self.get_byte(addr + 3) as u32) << 24
     }
 
     pub fn set_byte(&mut self, addr: u32, val: u8) {
@@ -339,25 +328,18 @@ impl RawMemory {
     }
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
-        self.get_loc_mut(addr).map(|(segment, idx)| {
-            segment[idx] = util::get_byte(val, 0) as u8;
-            segment[idx + 1] = util::get_byte(val, 8) as u8;
-        });
+        self.set_byte(addr, util::get_byte(val, 0) as u8);
+        self.set_byte(addr + 1, util::get_byte(val, 8) as u8);
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {
-        self.get_loc_mut(addr).map(|(segment, idx)| {
-            segment[idx] = util::get_byte(val, 0) as u8;
-            segment[idx + 1] = util::get_byte(val, 8) as u8;
-            segment[idx + 2] = util::get_byte(val, 16) as u8;
-            segment[idx + 3] = util::get_byte(val, 24) as u8;
-        });
+        self.set_byte(addr, util::get_byte(val, 0) as u8);
+        self.set_byte(addr + 1, util::get_byte(val, 8) as u8);
+        self.set_byte(addr + 2, util::get_byte(val, 16) as u8);
+        self.set_byte(addr + 3, util::get_byte(val, 24) as u8);
     }
 }
 
-// TODO: this means that set_hw/set_word should be called in terms of set_byte
-// (e.g. currently if we want to read from 0x420003 we will get the wrong value
-// because of memory mirrors)
 /// map any addresses of mirrored segments of memory to the actual segment
 fn canonicalize_addr(addr: u32) -> u32 {
     match addr {
