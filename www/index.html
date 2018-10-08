@@ -22,10 +22,15 @@
     <label for="breakpoint">Set breakpoint:</label>
     <input type="text" name="breakpoint" id="bpinput"><br>
 
+    <input type="submit" value="run" id="tracesubmit">
+    <label for="trace">Number of instructions:</label>
+    <input type="text" name="trace" id="traceinput"><br>
+
     <button id="step">step</button>
     <button id="frame">frame</button>
 
-    <div class="container">
+    <span id="count"></span>
+    <div class="container" style="margin-bottom: 30px">
         <div class="row" id="regs">
         </div>
         <hr>

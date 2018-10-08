@@ -5,3 +5,5 @@ gba.js
 gba_bg.wasm
 
 capstone-arm.min.js
+
+data

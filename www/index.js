@@ -10,23 +10,24 @@ const armd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_ARM);
 const thumbd = new cs.Capstone(cs.ARCH_ARM, cs.MODE_THUMB);
 let dis = armd;
 
+let instruction_count = 0;
 let bios_ptr = VM.get_bios();
 let bg_palette_ptr = VM.get_bg_palette();
 let sprite_palette_ptr = VM.get_bg_palette();
 let rom;
 let buf8 = new Uint8Array(memory.buffer);
 
-const parse_cpsr = (raw) => ({
+const parseCpsr = (raw) => ({
     neg: (raw >> 31) & 1 == 1,
     zero: (raw >> 30) & 1 == 1,
     carry: (raw >> 29) & 1 == 1,
     overflow: (raw >> 28) & 1 == 1,
     irq: (raw >> 7) & 1 == 1,
     thumb: (raw >> 5) & 1 == 1,
-    mode: get_mode(raw & 0b11111),
+    mode: getMode(raw & 0b11111),
 })
 
-const get_mode = (raw) => {
+const getMode = (raw) => {
     switch(raw) {
         case 0b10000:
             return "USR"
@@ -47,9 +48,9 @@ const get_mode = (raw) => {
     }
 }
 
-const get_flag = (on, char) => on ? char : '-'
+const getFlag = (on, char) => on ? char : '-'
 
-const update_shared_mem = () => {
+const updateSharedMem = () => {
     bios_ptr = VM.get_bios();
     bg_palette_ptr = VM.get_bg_palette();
     sprite_palette_ptr = VM.get_bg_palette();
@@ -79,9 +80,15 @@ const addDebugListener = () => {
         let bp = parseInt(document.getElementById('bpinput').value, 16);
         run_until_break(bp);
     })
+    const traceButton = document.getElementById('tracesubmit')
+    traceButton.addEventListener("click", event => {
+        let n = parseInt(document.getElementById('traceinput').value, 10);
+        trace(n);
+    })
 }
 
 const dumpState = () => {
+    $("#count").text(instruction_count);
     $("#regs").empty();
     for (let i = 0; i < 16; i++) {
         $("#regs").append(
@@ -90,15 +97,15 @@ const dumpState = () => {
     }
 
     $("#pipeline").empty();
-    let cpsr = parse_cpsr(VM.get_cpsr());
+    let cpsr = parseCpsr(VM.get_cpsr());
     $("#pipeline").append(
         `<div class="col-md-4 col-md-offset-4">
-            ${get_flag(cpsr.neg, 'N')}
-            ${get_flag(cpsr.zero, 'Z')}
-            ${get_flag(cpsr.carry, 'C')}
-            ${get_flag(cpsr.overflow, 'V')}
-            ${get_flag(cpsr.irq, 'I')}
-            ${get_flag(cpsr.thumb, 'T')}
+            ${getFlag(cpsr.neg, 'N')}
+            ${getFlag(cpsr.zero, 'Z')}
+            ${getFlag(cpsr.carry, 'C')}
+            ${getFlag(cpsr.overflow, 'V')}
+            ${getFlag(cpsr.irq, 'I')}
+            ${getFlag(cpsr.thumb, 'T')}
             ${cpsr.mode}
         </div>`);
 
@@ -131,9 +138,9 @@ const dumpState = () => {
 const showPalette = (id, ptr) => {
     $(id).empty();
     for (let i = 0; i < 256; i++) {
-        let red = buf8[ptr + i*4];
+        let blue = buf8[ptr + i*4];
         let green = buf8[ptr + i*4 + 1];
-        let blue = buf8[ptr + i*4 + 2];
+        let red = buf8[ptr + i*4 + 2];
         let color = `rgb(${red}, ${green}, ${blue})`;
         $(id).append(
             `<div class="palette-item" style="background-color: ${color}"></div>`)
@@ -141,47 +148,81 @@ const showPalette = (id, ptr) => {
 }
 
 const step = () => {
-    VM.step();
-    dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
+    if (VM.step()) {
+        pipelineFill();
+    }
+    instruction_count += 1;
+    dis = parseCpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
 }
 
 const frame = () => {
     VM.frame();
-    dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
+    dis = parseCpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
 }
 
 const run_until_break = (breakpoint) => {
     let steps = 0;
     let started = false;
-    while (!started || (VM.get_register(15) !== breakpoint)) {
+    while (!started || ((VM.get_register(15) - (dis == armd ? 8 : 4)) !== breakpoint)) {
         started = true;
         if (steps > 100000) { // don't hang indefinitely
             break;
         }
-        VM.step();
-        dis = parse_cpsr(VM.get_cpsr()).thumb ? thumbd : armd;
+        if (VM.step()) {
+            pipelineFill();
+        }
         steps += 1;
     }
+    instruction_count += steps;
+    dis = parseCpsr(VM.get_cpsr()).thumb ? thumbd : armd;
     dumpState();
+}
+
+const trace = (n) => {
+    for (let i = 0; i < n; i++) {
+        if (VM.step()) {
+            pipelineFill();
+        }
+    }
+    instruction_count += n;
+    dis = parseCpsr(VM.get_cpsr()).thumb ? thumbd : armd;
+    dumpState();
+}
+
+const pipelineFill = () => {
+    VM.step();
+    VM.step();
+}
+
+const init = async () => {
+    let bios = new Uint8Array(
+        await fetch (`data/gba_bios.bin`).then(resp => resp.arrayBuffer()));
+    VM.upload_bios(bios);
+    let rom = new Uint8Array(
+        await fetch (`data/sapphire.gba`).then(resp => resp.arrayBuffer()));
+    VM.upload_rom(rom);
+    updateSharedMem();
+    dumpState();
+    pipelineFill();
 }
 
 VM.set_panic_hook();
 addUploadListener("bios", (data) => {
     VM.upload_bios(data);
-    update_shared_mem();
+    updateSharedMem();
     dumpState();
     // pipeline fill
-    step();
-    step();
+    pipelineFill();
 });
 addUploadListener("rom", (data) => {
     VM.upload_rom(data);
-    update_shared_mem();
+    updateSharedMem();
     rom = data;
 });
 addDebugListener();
+await init();
 }
 
 run();
