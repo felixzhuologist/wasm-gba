@@ -47,18 +47,22 @@ impl Memory {
     }
 
     pub fn get_byte(&self, addr: u32) -> u8 {
+        let addr = canonicalize_addr(addr);
         self.raw.get_byte(addr)
     }
 
     pub fn get_halfword(&self, addr: u32) -> u16 {
+        let addr = canonicalize_addr(addr);
         self.raw.get_halfword(addr)
     }
 
     pub fn get_word(&self, addr: u32) -> u32 {
+        let addr = canonicalize_addr(addr);
         self.raw.get_word(addr)
     }
 
     pub fn set_byte(&mut self, addr: u32, val: u8) {
+        let addr = canonicalize_addr(addr);
         self.raw.set_byte(addr, val);
 
         match addr {
@@ -81,6 +85,7 @@ impl Memory {
     // mapped segment?
 
     pub fn set_halfword(&mut self, addr: u32, val: u32) {
+        let addr = canonicalize_addr(addr);
         self.raw.set_halfword(addr, val);
 
         match addr {
@@ -99,6 +104,7 @@ impl Memory {
     }
 
     pub fn set_word(&mut self, addr: u32, val: u32) {
+        let addr = canonicalize_addr(addr);
         self.raw.set_word(addr, val);
 
         match addr {
@@ -349,6 +355,32 @@ impl RawMemory {
     }
 }
 
+// TODO: this means that set_hw/set_word should be called in terms of set_byte
+// (e.g. currently if we want to read from 0x420003 we will get the wrong value
+// because of memory mirrors)
+/// map any addresses of mirrored segments of memory to the actual segment
+fn canonicalize_addr(addr: u32) -> u32 {
+    match addr {
+        0x0000000...0x0FFFFFF => addr,
+        0x2000000...0x2FFFFFF => EWRAM_START + (addr % 0x40000),
+        0x3000000...0x3FFFFFF => IWRAM_START + (addr % 0x8000),
+        0x4000000...0x40003FF => addr,
+        0x4000400...0x4FFFFFF => {
+            // the word at 0x4000800 is mirrored every 0x10000 bytes
+            let offset = addr % 0x10000;
+            if offset < 4 { 0x4000800 + offset } else { addr }
+        },
+        0x5000000...0x5FFFFFF => PAL_START + (addr % 0x400),
+        0x6000000...0x6017FFF => addr,
+        // 0x06010000 - 0x06017FFF <=> 0x06018000 - 0x0601FFFF
+        0x6018000...0x601FFFF => 0x6010000 + addr - 0x6018000,
+        // 0x06000000 - 0x06020000 <=> 0x06000000 - 0x06FFFFFF (every 0x20000 bytes)
+        0x6020000...0x6FFFFFF => canonicalize_addr(VRAM_START + addr % 0x20000),
+        0x7000000...0x7FFFFFF => OAM_START + (addr % 0x400),
+        _ => addr,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -389,5 +421,30 @@ mod test {
         assert_eq!(mem.get_word(0x123), 0xABC001);
         mem.set_word(0x3007FFC, 0x300);
         assert_eq!(mem.get_word(0x3007FFC), 0x300);
+    }
+
+    #[test]
+    fn canonicalize() {
+        assert_eq!(canonicalize_addr(0x0123456), 0x0123456);
+
+        assert_eq!(canonicalize_addr(0x2040000), 0x2000000);
+        assert_eq!(canonicalize_addr(0x2080020), 0x2000020);
+
+        assert_eq!(canonicalize_addr(0x3000011), 0x3000011);
+        assert_eq!(canonicalize_addr(0x3038002), 0x3000002);
+
+        assert_eq!(canonicalize_addr(0x4000123), 0x4000123);
+        assert_eq!(canonicalize_addr(0x4111111), 0x4111111);
+        assert_eq!(canonicalize_addr(0x4010000), 0x4000800);
+        assert_eq!(canonicalize_addr(0x4020003), 0x4000803);
+
+        assert_eq!(canonicalize_addr(0x5006C03), 0x5000003);
+
+        assert_eq!(canonicalize_addr(0x6000ABC), 0x6000ABC);
+        assert_eq!(canonicalize_addr(0x6018001), 0x6010001);
+        assert_eq!(canonicalize_addr(0x6020001), 0x6000001);
+        assert_eq!(canonicalize_addr(0x6038001), 0x6010001);
+
+        assert_eq!(canonicalize_addr(0x70034AA), 0x70000AA);
     }
 }
