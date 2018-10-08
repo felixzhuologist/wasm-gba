@@ -53,7 +53,7 @@ pub fn decode_arm(ins: u32) -> Option<Instruction> {
         Some(MultiplyLong(mul_long::MultiplyLong::parse_instruction(ins)))
     } else if op0 == 1 && op2 == 9 {
         Some(SwapTransfer(swap::SingleDataSwap::parse_instruction(ins)))
-    } else if op0 == 1 && op2 == 1 {
+    } else if (ins & 0x0FFFFFF0) == 0x012FFF10 {
         Some(BranchEx(branch_ex::BranchAndExchange::parse_instruction(ins)))
     } else if op0 < 2 && (op2 == 9 || op2 == 11 || op2 == 13 || op2 == 15) {
         // if bits 4 and 7 are 1, this must be a signed/hw transfer
@@ -222,6 +222,7 @@ mod test {
             has_type!(0x03123456, Instruction::DataProc(_));
             has_type!(0xA3123456, Instruction::DataProc(_));
             has_type!(0x001A3D56, Instruction::DataProc(_));
+            has_type!(0b11100001101000000110100100010110, Instruction::DataProc(_));
         }
 
         #[test]

@@ -286,7 +286,7 @@ impl RawMemory {
     }
 
     pub fn get_byte(&self, addr: u32) -> u8 {
-        let (segment, idx) = self.get_loc(addr).unwrap();
+        let (segment, idx) = self.get_loc(addr).unwrap_or((&[], 1));
         if idx >= segment.len() {
             return 0;
         }
@@ -294,7 +294,7 @@ impl RawMemory {
     }
 
     pub fn get_halfword(&self, addr: u32) -> u16 {
-        let (segment, idx) = self.get_loc(addr).unwrap();
+        let (segment, idx) = self.get_loc(addr).unwrap_or((&[0], 1));
         if idx >= segment.len() - 1 {
             return 0;
         }
@@ -302,7 +302,7 @@ impl RawMemory {
     }
 
     pub fn get_word(&self, addr: u32) -> u32 {
-        let (segment, idx) = self.get_loc(addr).unwrap();
+        let (segment, idx) = self.get_loc(addr).unwrap_or((&[0, 0, 0], 1));
         if idx >= segment.len() - 3 {
             return 0;
         }

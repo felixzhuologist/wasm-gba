@@ -9,7 +9,7 @@ pub const WIDTH: usize = 240;
 pub const HEIGHT: usize = 160;
 
 pub struct FrameBuffer {
-    pixels: [[u32; WIDTH]; HEIGHT]
+    pixels: [[u16; WIDTH]; HEIGHT]
 }
 
 impl FrameBuffer {

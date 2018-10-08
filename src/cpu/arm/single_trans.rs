@@ -83,6 +83,7 @@ impl SingleDataTransfer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ::cpu::arm::RegOrImm;
 
     #[test]
     fn parse_imm() {

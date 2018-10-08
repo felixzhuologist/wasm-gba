@@ -51,7 +51,7 @@ fn high_to_true(color: u16) -> u32 {
     let blue = (color >> 10) & 0x1F;
     // move 5 bits into the higher 5 of the 8 bits for each color, hence an extra
     // left by 3
-    0xFF000000 | (red << 19) | (green << 11) | blue << 3
+    0xFF000000 | (red << 19) | (green << 11) | (blue << 3)
 }
 
 #[cfg(test)]

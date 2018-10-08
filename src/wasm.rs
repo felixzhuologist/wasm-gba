@@ -70,8 +70,8 @@ pub fn get_sprite_palette() -> *const u8 {
 }
 
 #[wasm_bindgen]
-pub fn step() {
-    unsafe { GBA.step(); }
+pub fn step() -> bool {
+    unsafe { GBA.step(); GBA.cpu.should_flush }
 }
 
 #[wasm_bindgen]

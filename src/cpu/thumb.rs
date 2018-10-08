@@ -125,8 +125,8 @@ pub fn alu_op(raw: u16) -> Instruction {
             set_flags: true,
             rd,
             rn: 0, // unused when accumulate = false
-            rs: rs as usize,
-            rm: rd,
+            rs: rd,
+            rm: rs as usize,
         })
     } else { // data instruction
         Instruction::DataProc(DataProc {
@@ -539,6 +539,15 @@ mod test {
                 assert_eq!(ins.rn, 0b001);
                 assert_eq!(ins.rd, 0b010);
                 assert_eq!(ins.op2, RegOrImm::Imm { rotate: 0, value: 0 });
+            },
+            _ => panic!()
+        };
+
+        match alu_op(0b010000_1101_000_100) {
+            Instruction::Multiply(ins) => {
+                assert_eq!(ins.rd, 4);
+                assert_eq!(ins.rm, 0);
+                assert_eq!(ins.rs, 4);
             },
             _ => panic!()
         };

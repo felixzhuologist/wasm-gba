@@ -27,7 +27,7 @@ pub enum Op {
 }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataProc {
     pub opcode: Op,
     pub set_flags: bool,
@@ -72,8 +72,13 @@ impl DataProc {
         let (op2, shift_carry) = match self.op2 {
             RegOrImm::Imm { rotate, value } => {
                 let result = value.rotate_right(rotate * 2);
-                // TODO: what is carry flag set to when I=1 and a logical op is used?
-                (result, ((result >> 31) & 1) == 1)
+                // rotate 0 <=> LSL 0 which should preserve the carry flag
+                let carry_out = if rotate == 0 {
+                    cpu.cpsr.carry
+                } else {
+                    ((result >> 31) & 1) == 1
+                };
+                (result, carry_out)
             },
             RegOrImm::Reg { shift, reg } => apply_shift(cpu, shift, reg)
         };
@@ -243,9 +248,23 @@ fn sub_with_carry(minuend: u32, subtrahend: u32) -> (u32, bool) {
     (minuend.wrapping_sub(subtrahend), subtrahend <= minuend)
 }
 
+// TODO: use eq trait for DataProc instead of comparing each field individually
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn parse_move() {
+        let ins = DataProc::parse_instruction(
+            0b11100001101000000110100100010110);
+        assert_eq!(ins, DataProc {
+            opcode: Op::MOV,
+            set_flags: false,
+            rn: 0,
+            rd: 6,
+            op2: RegOrImm::Reg { shift: 0b10010001, reg: 6 }
+        });
+    }
 
     #[test]
     fn parse_reg() {
@@ -501,5 +520,36 @@ mod test {
         assert_eq!(cpu.cpsr.carry, true);
         assert_eq!(cpu.cpsr.overflow, false);
         assert_eq!(cpu.cpsr.neg, false);
+    }
+
+
+    #[test]
+    fn move_carry() {
+        // check that an immediate op2 preserves carry for logical ops
+        let mut cpu = CPU::new();
+        cpu.cpsr.carry = true;
+        DataProc {
+            opcode: Op::MOV,
+            set_flags: true,
+            rn: 0,
+            rd: 0,
+            op2: RegOrImm::Imm { rotate: 0, value: 0 }
+        }.run(&mut cpu);
+        assert_eq!(cpu.cpsr.carry, true);
+    }
+
+    #[test]
+    fn tst() {
+        let mut cpu = CPU::new();
+        cpu.cpsr.carry = true;
+        cpu.set_reg(0, 0x3000564);
+        DataProc {
+            opcode: Op::TST,
+            set_flags: true,
+            rn: 0,
+            rd: 0,
+            op2: RegOrImm::Imm { rotate: 4, value: 0b1110}
+        }.run(&mut cpu);
+        assert!(!cpu.cpsr.carry)
     }
 }

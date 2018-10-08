@@ -324,7 +324,7 @@ pub struct DispStat {
     pub vcount_irq_enabled: bool,
     /// 8-F (T) = Vcount line trigger. Set this to the VCount value you wish to trigger an
     ///           interrupt.
-    vcount_line_trigger: u8
+    pub vcount_line_trigger: u8
 }
 
 impl DispStat {

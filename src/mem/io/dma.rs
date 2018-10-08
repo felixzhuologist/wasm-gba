@@ -146,6 +146,7 @@ impl Memory {
     }
 }
 
+#[derive(Debug)] 
 pub struct DMAChannel {
     /// 27 bit for channel 0, 28 bit for 1 - 3
     src: u32,

@@ -63,7 +63,7 @@ impl CPUWrapper {
     /// and the CPU is in SYS mode with FIQ bit set
     pub const fn new_direct_boot() -> CPUWrapper {
         CPUWrapper {
-            cpu: CPU::new(),
+            cpu: CPU::new_direct_boot(),
             pipeline: [
                 PipelineInstruction::Empty,
                 PipelineInstruction::Empty,
@@ -88,44 +88,24 @@ impl CPUWrapper {
     /// and check for DMA/interrupts. Returns true if a new refresh cycle
     /// has started
     pub fn step(&mut self) -> bool {
+        // reset should_flush at the start of the next instruction, so the
+        // debugger knows to do a pipeline refill automatically
+        self.cpu.should_flush = false;
         self.fetch();
         self.decode();
         let cycles = self.execute();
 
         if self.cpu.should_flush {
             self.flush_pipeline();
-            self.cpu.should_flush = false;
         } else {
             self.idx = (self.idx + 1) % 3;
             self.cpu.incr_pc();
         }
 
+        // TODO: add delay to DMA transfers
         self.cpu.mem.check_dma(mem::io::dma::TimingMode::Now);
         self.cpu.check_interrupts();
-        
-        let before = self.cycles;
-        for _ in 0..cycles {
-            let row = self.cycles / SCANLINE;
-            let col = self.cycles % SCANLINE;
-            match col {
-                0 => {
-                    self.cpu.mem.graphics.disp_stat.is_hblank = false;
-                    self.cpu.mem.on_vcount_hook(cycles / SCANLINE);
-                },
-                HDRAW => { self.cpu.mem.on_hblank_hook(); },
-                _ => (),
-            }
-            match self.cycles {
-                0 => { self.cpu.mem.graphics.disp_stat.is_vblank = false; }
-                VDRAW => { self.cpu.mem.on_vblank_hook(); },
-                _ => (),
-            }
-            if self.cycles % 4 == 0 {
-                self.cpu.mem.update_pixel(row, col);
-            }
-            self.cycles = (self.cycles + 1) % REFRESH;
-        }
-        before > self.cycles
+        self.update_lcd(cycles)
     }
 
     pub fn fetch(&mut self) {
@@ -181,7 +161,7 @@ impl CPUWrapper {
                 Instruction::SWInterrupt(ins) => ins.run(&mut self.cpu),
                 Instruction::CondBranch(ins) => ins.run(&mut self.cpu),
                 Instruction::LongBranch(ins) => ins.run(&mut self.cpu),
-            }
+            };
         }
         return 0;
     }
@@ -191,6 +171,33 @@ impl CPUWrapper {
             self.pipeline[i] = PipelineInstruction::Empty;
         }
         self.idx = 0;
+    }
+
+    pub fn update_lcd(&mut self, cycles: u32) -> bool {
+        let before = self.cycles;
+        for _ in 0..cycles {
+            self.cycles = (self.cycles + 1) % REFRESH;
+
+            let row = self.cycles / SCANLINE;
+            let col = self.cycles % SCANLINE;
+            match col {
+                0 => {
+                    self.cpu.mem.graphics.disp_stat.is_hblank = false;
+                    self.cpu.mem.on_vcount_hook(row);
+                },
+                HDRAW => { self.cpu.mem.on_hblank_hook(); },
+                _ => (),
+            }
+            match self.cycles {
+                0 => { self.cpu.mem.graphics.disp_stat.is_vblank = false; }
+                VDRAW => { self.cpu.mem.on_vblank_hook(); },
+                _ => (),
+            }
+            if self.cycles % 4 == 0 {
+                self.cpu.mem.update_pixel(row, col);
+            }
+        }
+        before > self.cycles // if we wrapped around
     }
 }
 
@@ -221,7 +228,7 @@ pub struct CPU {
     pub spsr_fiq: PSR,
 
     // flush the pipeline before the start of the next cycle
-    should_flush: bool,
+    pub should_flush: bool,
 
     pub mem: mem::Memory,
 }
