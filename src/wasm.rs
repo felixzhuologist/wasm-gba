@@ -70,6 +70,11 @@ pub fn get_sprite_palette() -> *const u8 {
 }
 
 #[wasm_bindgen]
+pub fn get_vram() -> *const u8 {
+    unsafe { &GBA.cpu.mem.raw.vram as *const u8 }
+}
+
+#[wasm_bindgen]
 pub fn step() -> bool {
     unsafe { GBA.step(); GBA.cpu.should_flush }
 }

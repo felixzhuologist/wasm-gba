@@ -226,24 +226,24 @@ pub struct RawMemory {
     pub sysrom: [u8; 0x4000],
     /// space for game data/code; largest area of RAM but memory transfers are
     /// 16 bit wide which makes it slower than iwram
-    ewram: [u8; 0x40000],
+    pub ewram: [u8; 0x40000],
     /// fastest RAM segment which is internally embedded in the CPU chip package
     /// with a 32 bit bus
-    iwram: [u8; 0x8000],
+    pub iwram: [u8; 0x8000],
     /// a mirror of the memory mapped ASIC registers on the GBA used to control
     /// graphics, sound, DMA, timers, etc.
-    io: [u8; 0x400],
+    pub io: [u8; 0x400],
     /// specifies 16 bit color values for the paletted modes. There are two
     /// palettes of 256 colors - one for backgrounds and one for sprites.
-    pal: [u8; 0x400],
+    pub pal: [u8; 0x400],
     /// stores the frame buffer in bitmapped modes or the tile data/tile maps
     /// in text, rotate/scale modes
-    vram: [u8; 0x18000],
+    pub vram: [u8; 0x18000],
     /// stores 128 entries of 8 bytes, containing information for each sprite
-    oam: [u8; 0x400],
+    pub oam: [u8; 0x400],
     // ROM in the game cartridge appears in this area. This ROM gets uploaded
     // on the javascript side and then a reference to it is set here
-    rom: Option<&'static [u8]>,
+    pub rom: Option<&'static [u8]>,
     // either SRAM or flash ROM used for saving game data
     // TODO: allocate on the javascript side?
     // cart: Vec<u8>,

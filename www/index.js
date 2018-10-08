@@ -14,6 +14,7 @@ let instruction_count = 0;
 let bios_ptr = VM.get_bios();
 let bg_palette_ptr = VM.get_bg_palette();
 let sprite_palette_ptr = VM.get_bg_palette();
+let tile_ptr = VM.get_vram();
 let rom;
 let buf8 = new Uint8Array(memory.buffer);
 
@@ -54,6 +55,7 @@ const updateSharedMem = () => {
     bios_ptr = VM.get_bios();
     bg_palette_ptr = VM.get_bg_palette();
     sprite_palette_ptr = VM.get_sprite_palette();
+    tile_ptr = VM.get_vram();
     buf8 = new Uint8Array(memory.buffer);
 }
 
@@ -133,19 +135,62 @@ const dumpState = () => {
 
     showPalette("#bg-palette", bg_palette_ptr);
     showPalette("#sprite-palette", sprite_palette_ptr);
+    showTiles();
 }
 
 const showPalette = (id, ptr) => {
     $(id).empty();
     for (let i = 0; i < 256; i++) {
-        let blue = buf8[ptr + i*4];
-        let green = buf8[ptr + i*4 + 1];
-        let red = buf8[ptr + i*4 + 2];
+        let { blue, green, red } = readColor(ptr + i*4);
         let color = `rgb(${red}, ${green}, ${blue})`;
         $(id).append(
-            `<div class="palette-item" style="background-color: ${color}"></div>`)
+            `<div class="palette-item" style="background-color: ${color}"></div>`);
     }
 }
+
+const WIDTH = 256;
+const HEIGHT = 384;
+const TILES_PER_ROW = 32;
+const showTiles = () => {
+    let canvas = document.getElementById('tile-canvas');
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    let ctx = canvas.getContext('2d');
+    let pixels = ctx.getImageData(0, 0, WIDTH, HEIGHT);
+    let current = tile_ptr;
+    let tile_idx = 0;
+    for (let i = 0; i < 6; i++) { // charblock
+        // assume 8 bit pixel depth for now
+        for (let j = 0; j < 256; j++) { // tile
+            tile_row = Math.floor(tile_idx / TILES_PER_ROW);
+            tile_col = tile_idx % TILES_PER_ROW;
+            for (let k = 0; k < 64; k++) {
+                let colorOffset = buf8[current];
+                let palettePtr = i < 4 ? bg_palette_ptr : sprite_palette_ptr;
+                let { blue, green, red } = readColor(palettePtr + colorOffset*4);
+
+                let row_in_tile = Math.floor(k / 8);
+                let col_in_tile = k % 8;
+                let row = tile_row*8 + row_in_tile;
+                let col = tile_col*8 + col_in_tile;
+                let idx = row*TILES_PER_ROW*8 + col;
+                pixels.data[idx*4] = red;
+                pixels.data[idx*4 + 1] = green;
+                pixels.data[idx*4 + 2] = blue;
+                pixels.data[idx*4 + 3] = 255;
+                current += 1;
+            }
+            tile_idx += 1;
+        }
+    }
+    ctx.putImageData(pixels, 0, 0);
+}
+
+const readColor = (ptr) => ({
+    blue: buf8[ptr],
+    green: buf8[ptr + 1],
+    red: buf8[ptr + 2],
+})
 
 const step = () => {
     if (VM.step()) {
