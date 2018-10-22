@@ -80,7 +80,19 @@ impl DataProc {
                 };
                 (result, carry_out)
             },
-            RegOrImm::Reg { shift, reg } => apply_shift(cpu, shift, reg)
+            RegOrImm::Reg { shift, reg } => {
+                let (mut op2, shift_carry) = apply_shift(cpu, shift, reg);
+                // when R15 is used as an operand and a register is used to specify
+                // the shift amount, the PC will be 12 bytes ahead instead of 8
+                let reg_shift = util::get_bit(shift, 0);
+                if self.rn == 15 && reg_shift {
+                    op1 += 4;
+                }
+                if reg == 15 && reg_shift {
+                    op2 += 4;
+                }
+                (op2, shift_carry)
+            }
         };
 
         let (result, carry_out) = match self.opcode {
@@ -172,8 +184,15 @@ impl DataProc {
 /// The resulting val and the carry bit (which may be used to set the carry flag
 /// for logical operations) are returned
 pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
-    let shift_amount = get_shift_amount(cpu, shift);
+    let (is_shift_immediate, shift_amount) = get_shift_amount(cpu, shift);
     let val = cpu.get_reg(reg as usize);
+
+    // the special encodings for LSR/ASR/RSR 0 only apply to immediate shifts,
+    // so return early (and perform LSL 0) if we shift by a reg amount that is 0
+    if !is_shift_immediate && shift_amount == 0 {
+        return (val, cpu.cpsr.carry);
+    }
+
     // TODO: use enum here?
     match (util::get_bit(shift, 2), util::get_bit(shift, 1)) {
         (false, false) => { // logical shift left
@@ -229,16 +248,20 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
     }
 }
 
-fn get_shift_amount(cpu: &CPU, shift: u32) -> u32 {
+/// Parse the shift bits (4 - 11) and return whether the shift amount was an
+/// immediate, and the actual shift amount
+fn get_shift_amount(cpu: &CPU, shift: u32) -> (bool, u32) {
     match (util::get_bit(shift, 3), util::get_bit(shift, 0)) {
+        // shift by register amount
         (false, true) => {
             let rs = util::get_nibble(shift, 4);
             if rs == 15 {
                 panic!("cannot use R15 as shift amount");
             }
-            cpu.get_reg(rs as usize) & 0xFF
+            (false, cpu.get_reg(rs as usize) & 0xFF)
         },
-        (_, false) => (shift >> 3) & 0b11111,
+        // shift by immediate amount
+        (_, false) => (true, (shift >> 3) & 0b11111),
         _ => panic!("invalid sequence of bits for shift")
     }
 }
@@ -297,11 +320,11 @@ mod test {
     #[test]
     fn shift_amt_imm() {
         let cpu = CPU::new();
-        assert_eq!(get_shift_amount(&cpu, 0b11011_000), 0b11011);
-        assert_eq!(get_shift_amount(&cpu, 0b00001_010), 0b00001);
-        assert_eq!(get_shift_amount(&cpu, 0b10000_100), 0b10000);
-        assert_eq!(get_shift_amount(&cpu, 0b11111_110), 0b11111);
-        assert_eq!(get_shift_amount(&cpu, 0), 0);
+        assert_eq!(get_shift_amount(&cpu, 0b11011_000), (true, 0b11011));
+        assert_eq!(get_shift_amount(&cpu, 0b00001_010), (true, 0b00001));
+        assert_eq!(get_shift_amount(&cpu, 0b10000_100), (true, 0b10000));
+        assert_eq!(get_shift_amount(&cpu, 0b11111_110), (true, 0b11111));
+        assert_eq!(get_shift_amount(&cpu, 0), (true, 0));
     }
 
     #[test]
@@ -309,18 +332,18 @@ mod test {
         let mut cpu = CPU::new();
 
         cpu.set_reg(0, 0xFFFFFF_03);
-        assert_eq!(get_shift_amount(&cpu, 0b0000_0001), 0x03);
+        assert_eq!(get_shift_amount(&cpu, 0b0000_0001), (false, 0x03));
 
         cpu.set_reg(3, 0x00_FF);
-        assert_eq!(get_shift_amount(&cpu, 0b0011_0011), 0xFF);
+        assert_eq!(get_shift_amount(&cpu, 0b0011_0011), (false, 0xFF));
 
         cpu.set_reg(4, 0xAB_09);
-        assert_eq!(get_shift_amount(&cpu, 0b0100_0101), 0x09);
+        assert_eq!(get_shift_amount(&cpu, 0b0100_0101), (false, 0x09));
 
         cpu.set_reg(14, 0x99_A1);
-        assert_eq!(get_shift_amount(&cpu, 0b1110_0111), 0xA1);
+        assert_eq!(get_shift_amount(&cpu, 0b1110_0111), (false, 0xA1));
 
-        assert_eq!(get_shift_amount(&cpu, 0b0001_0111), 0);
+        assert_eq!(get_shift_amount(&cpu, 0b0001_0111), (false, 0));
     }
 
     #[test]
@@ -536,6 +559,52 @@ mod test {
             op2: RegOrImm::Imm { rotate: 0, value: 0 }
         }.run(&mut cpu);
         assert_eq!(cpu.cpsr.carry, true);
+    }
+
+    #[test]
+    fn shift_reg() {
+        // check that LSR by a register with value 0 is the same as LSL 0
+        let mut cpu = CPU::new();
+        cpu.set_reg(4, 0);
+        cpu.set_reg(11, 1);
+        cpu.set_reg(12, 0);
+        cpu.cpsr.neg = true;
+        DataProc {
+            opcode: Op::MOV,
+            set_flags: true,
+            rn: 0,
+            rd: 12,
+            op2: RegOrImm::Reg { shift: 0b0100_0011, reg: 11 }
+        }.run(&mut cpu);
+        assert!(!cpu.cpsr.neg);
+        assert!(!cpu.cpsr.zero);
+        assert_eq!(cpu.get_reg(12), 1);
+    }
+
+    #[test]
+    fn pc_op() {
+        // check that if R15 is used as an operand AND a shift by register
+        // amount is specified that the operand(s) get incremented appropriately
+        let mut cpu = CPU::new();
+        cpu.set_reg(15, 8);
+        DataProc {
+            opcode: Op::ADD,
+            set_flags: false,
+            rn: 15,
+            rd: 0,
+            op2: RegOrImm::Reg { shift: 0b0001_0001, reg: 15 }
+        }.run(&mut cpu);
+        assert_eq!(cpu.get_reg(0), 24);
+
+        // doesn't happen for shift by immediate
+        DataProc {
+            opcode: Op::ADD,
+            set_flags: false,
+            rn: 15,
+            rd: 1,
+            op2: RegOrImm::Reg { shift: 0, reg: 15 }
+        }.run(&mut cpu);
+        assert_eq!(cpu.get_reg(1), 16);
     }
 
     #[test]

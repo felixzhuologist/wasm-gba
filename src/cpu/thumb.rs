@@ -33,7 +33,7 @@ pub fn move_(raw: u16) -> Instruction {
     Instruction::DataProc(DataProc{
         opcode: Op::MOV,
         set_flags: true,
-        rn: 0, // this is unused for MOV instructions. should this be an Option?
+        rn: 0,
         rd: (raw & 0b111) as usize,
         op2: RegOrImm::Reg { shift: imm | shift_op, reg: rs }
     })
