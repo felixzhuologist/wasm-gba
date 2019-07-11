@@ -49,7 +49,7 @@ impl DataProc {
             rn: util::get_nibble(ins, 16) as usize,
             set_flags: util::get_bit(ins, 20),
             opcode: Op::from_u32(util::get_nibble(ins, 21)).unwrap(),
-            op2: if is_imm { 
+            op2: if is_imm {
                 RegOrImm::Imm {
                     rotate: util::get_nibble(ins, 8),
                     value: util::get_byte(ins, 0)
@@ -81,55 +81,19 @@ impl DataProc {
                 (result, carry_out)
             },
             RegOrImm::Reg { shift, reg } => {
-                let (mut op2, shift_carry) = apply_shift(cpu, shift, reg);
                 // when R15 is used as an operand and a register is used to specify
                 // the shift amount, the PC will be 12 bytes ahead instead of 8
+                let mut rm_val = cpu.get_reg(reg as usize);
                 let reg_shift = util::get_bit(shift, 0);
                 if self.rn == 15 && reg_shift {
                     op1 += 4;
                 }
                 if reg == 15 && reg_shift {
-                    op2 += 4;
+                    rm_val += 4;
                 }
+                let (mut op2, shift_carry) = apply_shift(cpu, shift, rm_val);
                 (op2, shift_carry)
             }
-        };
-
-        let (result, carry_out) = match self.opcode {
-            Op::AND => (op1 & op2, shift_carry),
-            Op::EOR => (op1 ^ op2, shift_carry),
-            Op::SUB => sub_with_carry(op1, op2),
-            Op::RSB => sub_with_carry(op2, op1),
-            Op::ADD => op1.overflowing_add(op2),
-            Op::ADC => {
-                let (r1, c1) = op1.overflowing_add(op2);
-                let (r2, c2) = r1.overflowing_add(cpu.cpsr.carry as u32);
-                (r2, c1 || c2)
-            },
-            Op::SBC => {
-                let (r1, c1) = sub_with_carry(op1, op2);
-                let (r2, c2) = sub_with_carry(r1, 1);
-                let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
-                // if we "underflowed" then overflowed, then they cancel out
-                (result, sub_overflow ^ add_overflow)
-            },
-            Op::RSC => {
-                let (r1, c1) = sub_with_carry(op2, op1);
-                let (r2, c2) = sub_with_carry(r1, 1);
-                let sub_overflow = c1 || c2;
-                let (result, add_overflow) = r2.overflowing_add(cpu.cpsr.carry as u32);
-                // if we "underflowed" then overflowed, then they cancel out
-                (result, sub_overflow ^ add_overflow)
-            },
-            Op::TST => (op1 & op2, shift_carry),
-            Op::TEQ => (op1 ^ op2, shift_carry),
-            Op::CMP => sub_with_carry(op1, op2),
-            Op::CMN => op1.overflowing_add(op2),
-            Op::ORR => (op1 | op2, shift_carry),
-            Op::MOV => (op2, shift_carry),
-            Op::BIC => (op1 & (!op2), shift_carry),
-            Op::MVN => (!op2, shift_carry)
         };
 
         let should_write = match self.opcode {
@@ -139,22 +103,42 @@ impl DataProc {
             Op::CMN => false,
             _ => true
         };
+        if !self.set_flags && !should_write {
+            panic!("trying to use data instruction handler on a MRS/MSR instruction");
+        }
+
+        // all cases return a result, but the result is only saved in the destination
+        // if should_write (above) is true. carry_out is always written, and overflow
+        // is saved if it contains a value
+        let (result, carry_out, overflow) = match self.opcode {
+            Op::AND => (op1 & op2, shift_carry, None),
+            Op::EOR => (op1 ^ op2, shift_carry, None),
+            Op::SUB | Op::CMP => sub(op1, op2, 1),
+            Op::RSB => sub(op2, op1, 1),
+            Op::ADD | Op::CMN => add(op1, op2, 0),
+            Op::ADC => add(op1, op2, cpu.cpsr.carry as u32),
+            Op::SBC => sub(op1, op2, cpu.cpsr.carry as u32),
+            Op::RSC => sub(op2, op1, cpu.cpsr.carry as u32),
+            Op::TST => (op1 & op2, shift_carry, None),
+            Op::TEQ => (op1 ^ op2, shift_carry, None),
+            Op::ORR => (op1 | op2, shift_carry, None),
+            Op::MOV => (op2, shift_carry, None),
+            Op::BIC => (op1 & (!op2), shift_carry, None),
+            Op::MVN => (!op2, shift_carry, None)
+        };
 
         let old_pc = cpu.get_reg(15); // save PC in case we overwrite it here
         if should_write {
             cpu.set_reg(self.rd, result);
         }
 
-        if !self.set_flags && !should_write {
-            panic!("trying to use data instruction handler on a MRS/MSR instruction");
-        }
-    
         if self.set_flags || !should_write  {
-            // TODO: how are we supposed to know if the operands are signed?
-            // and detect if the V flag should be set
-            cpu.cpsr.carry = carry_out;
             cpu.cpsr.zero = result == 0;
-            cpu.cpsr.neg = ((result >> 31) & 1) == 1;
+            cpu.cpsr.neg = util::get_bit(result, 31);
+            cpu.cpsr.carry = carry_out;
+            if let Some(val) = overflow {
+                cpu.cpsr.overflow = val;
+            }
         }
 
         if self.rd == 15 && self.set_flags {
@@ -168,14 +152,14 @@ impl DataProc {
         if self.rd == 15 {
             cpu.should_flush = true;
             cycles += cpu.mem.access_time(cpu.r[15], true) +
-                cpu.mem.access_time(cpu.r[15] + 4, true);
+                cpu.mem.access_time(cpu.r[15] + 4, false);
         }
         cycles
     }
 }
 
-/// Applies a shift to either a register value or an immediate value.
-/// the shift parameter can either look like:
+/// Applies a either an instruction specified or a register specified shift to
+/// the provided value. The shift parameter can either look like:
 ///  7 .. 3 | 2 .. 1 | 0                    7 .. 4 | 3 | 2 .. 1 | 0
 ///  --------------------        OR         ------------------------
 ///   val   | type   | 0                      reg  | 0 | type   | 1
@@ -183,9 +167,8 @@ impl DataProc {
 /// right case uses the bottom byte of the contents of a registers.
 /// The resulting val and the carry bit (which may be used to set the carry flag
 /// for logical operations) are returned
-pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
+pub fn apply_shift(cpu: &CPU, shift: u32, val: u32) -> (u32, bool) {
     let (is_shift_immediate, shift_amount) = get_shift_amount(cpu, shift);
-    let val = cpu.get_reg(reg as usize);
 
     // the special encodings for LSR/ASR/RSR 0 only apply to immediate shifts,
     // so return early (and perform LSL 0) if we shift by a reg amount that is 0
@@ -201,15 +184,15 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
             } else if shift_amount > 32 {
                 (0, false)
             } else if shift_amount == 32 {
-                (0, (val & 1) == 1)
+                (0, util::get_bit(val, 0))
             } else {
-                let carry_out = (val >> (32 - shift_amount)) & 1;
-                ((val << shift_amount), carry_out == 1)
+                let carry_out = util::get_bit(val, (32 - shift_amount) as u8);
+                ((val << shift_amount), carry_out)
             }
         },
         (false, true) => { // logical shift right
             // LSR #0 is actually interpreted as LSR #32 since it is redundant
-            // with LSL #0 
+            // with LSL #0
             if shift_amount == 0 {
                 (0, ((val >> 31) & 1) == 1)
             } else if shift_amount > 32 {
@@ -223,8 +206,8 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
         },
         (true, false) => { // arithmetic shift right
             // As for LSR, ASR 0 is used to encode ASR 32
-            if shift_amount == 0 || shift_amount > 32 {
-                let carry_out = ((val >> 31) & 1) == 1;
+            if shift_amount == 0 || shift_amount >= 32 {
+                let carry_out = util::get_bit(val, 31);
                 (if carry_out {MAX} else {0}, carry_out)
             } else {
                 // convert to i32 to get arithmetic shifting
@@ -236,13 +219,12 @@ pub fn apply_shift(cpu: &CPU, shift: u32, reg: u32) -> (u32, bool) {
         (true, true) => { // rotate right
             // RSR #0 is used to encode RRX
             if shift_amount == 0 {
-                let carry_out = (val & 1) == 1;
+                let carry_out = util::get_bit(val, 0);
                 let result = (val >> 1) | ((cpu.cpsr.carry as u32) << 31);
                 (result, carry_out)
             } else {
                 let result = val.rotate_right(shift_amount);
-                let carry_out = (result >> 31) & 1;
-                (result, carry_out == 1)
+                (result, util::get_bit(result, 31))
             }
         }
     }
@@ -266,9 +248,19 @@ fn get_shift_amount(cpu: &CPU, shift: u32) -> (bool, u32) {
     }
 }
 
-/// return wrapped sub result and the carry bit of the ALU
-fn sub_with_carry(minuend: u32, subtrahend: u32) -> (u32, bool) {
-    (minuend.wrapping_sub(subtrahend), subtrahend <= minuend)
+/// Return the sum, carry, and overflow of the two operands
+fn add(op1: u32, op2: u32, carry: u32) -> (u32, bool, Option<bool>) {
+    let (r1, c1) = op1.overflowing_add(op2);
+    let (r2, c2) = r1.overflowing_add(carry);
+    // there's an overflow for addition when both operands are positive and the
+    // result is negative, or both operands are negative and the result is positive.
+    let overflow = (!(op1 ^ op2)) & (op1 ^ r2);
+    (r2, c1 || c2, Some(util::get_bit(overflow, 31)))
+}
+
+/// Return the difference, carry, and overflow of the two operands
+fn sub(op1: u32, op2: u32, carry: u32) -> (u32, bool, Option<bool>) {
+    add(op1, !op2, carry)
 }
 
 // TODO: use eq trait for DataProc instead of comparing each field individually
@@ -358,26 +350,26 @@ mod test {
         let mut cpu = CPU::new();
         // check least significant discarded bit = 1
         cpu.set_reg(5, 0xFF123456);
-        assert_eq!(apply_shift(&cpu, 0b00101_000, 5), (0xFF123456 << 5, true));
+        assert_eq!(apply_shift(&cpu, 0b00101_000, cpu.get_reg(5)), (0xFF123456 << 5, true));
 
         // check least significant discarded bit = 0
         cpu.set_reg(3, 0xF7123455);
-        assert_eq!(apply_shift(&cpu, 0b00101_000, 3), (0xF7123455 << 5, false));
+        assert_eq!(apply_shift(&cpu, 0b00101_000, cpu.get_reg(3)), (0xF7123455 << 5, false));
 
         // check that LSL by 0 retains the current carry flag
         cpu.cpsr.carry = true;
-        assert_eq!(apply_shift(&cpu, 0, 0), (0, true));
+        assert_eq!(apply_shift(&cpu, 0, cpu.get_reg(0)), (0, true));
 
         // lsl 32 with low bit = 0
         cpu.set_reg(10, 32);
-        assert_eq!(apply_shift(&cpu, 0b1010_0001, 5), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1010_0001, cpu.get_reg(5)), (0, false));
         // lsl 32 with low bit = 1
-        assert_eq!(apply_shift(&cpu, 0b1010_0001, 3), (0, true));
+        assert_eq!(apply_shift(&cpu, 0b1010_0001, cpu.get_reg(3)), (0, true));
 
         // lsl by more than 32
         cpu.set_reg(11, 33);
-        assert_eq!(apply_shift(&cpu, 0b1011_0001, 11), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b1011_0001, 11), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1011_0001, cpu.get_reg(11)), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1011_0001, cpu.get_reg(11)), (0, false));
     }
 
     #[test]
@@ -385,27 +377,27 @@ mod test {
         let mut cpu = CPU::new();
         // check most significant discarded bit = 1
         cpu.set_reg(15, 0xABCDEF3F);
-        assert_eq!(apply_shift(&cpu, 0b00101_010, 15), (0xABCDEF3F >> 5, true));
+        assert_eq!(apply_shift(&cpu, 0b00101_010, cpu.get_reg(15)), (0xABCDEF3F >> 5, true));
 
         // check most significant discarded bit = 0
         cpu.set_reg(10, 0x123456A8);
-        assert_eq!(apply_shift(&cpu, 0b00101_010, 10), (0x123456A8 >> 5, false));
+        assert_eq!(apply_shift(&cpu, 0b00101_010, cpu.get_reg(10)), (0x123456A8 >> 5, false));
 
         // check lsr 0/32 with high bit = 1
         cpu.set_reg(0, 0xFFFFFFFF);
         cpu.set_reg(8, 32);
-        assert_eq!(apply_shift(&cpu, 0b1000_0011, 0), (0, true));
-        assert_eq!(apply_shift(&cpu, 0b00000_010, 0), (0, true));
+        assert_eq!(apply_shift(&cpu, 0b1000_0011, cpu.get_reg(0)), (0, true));
+        assert_eq!(apply_shift(&cpu, 0b00000_010, cpu.get_reg(0)), (0, true));
 
         // check lsr 0/32 with high bit = 0
         cpu.set_reg(1, 0x7FFFFFF);
-        assert_eq!(apply_shift(&cpu, 0b1000_0011, 1), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b00000_010, 1), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1000_0011, cpu.get_reg(1)), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b00000_010, cpu.get_reg(1)), (0, false));
 
         // lsr by more than 32
         cpu.set_reg(9, 33);
-        assert_eq!(apply_shift(&cpu, 0b1001_0011, 15), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b1001_0011, 10), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1001_0011, cpu.get_reg(15)), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1001_0011, cpu.get_reg(10)), (0, false));
     }
 
     #[test]
@@ -414,22 +406,22 @@ mod test {
 
         // check positive, msdb = 1
         cpu.set_reg(0, 0x3123453F);
-        assert_eq!(apply_shift(&cpu, 0b00101_100, 0), (0x3123453F >> 5, true));
+        assert_eq!(apply_shift(&cpu, 0b00101_100, cpu.get_reg(0)), (0x3123453F >> 5, true));
 
         // check negative, msdb = 0
         cpu.set_reg(1, 0xF12345A8);
         assert_eq!(
-            apply_shift(&cpu, 0b00101_100, 1),
+            apply_shift(&cpu, 0b00101_100, cpu.get_reg(1)),
             (((0xF12345A8u32 as i32) >> 5) as u32, false));
 
         // check ASR 0 (32)
-        assert_eq!(apply_shift(&cpu, 0b00000_100, 0), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b00000_100, 1), (MAX, true));
+        assert_eq!(apply_shift(&cpu, 0b00000_100, cpu.get_reg(0)), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b00000_100, cpu.get_reg(1)), (MAX, true));
 
         // check ASR > 32
         cpu.set_reg(14, 33);
-        assert_eq!(apply_shift(&cpu, 0b1110_0101, 0), (0, false));
-        assert_eq!(apply_shift(&cpu, 0b1110_0101, 1), (MAX, true));
+        assert_eq!(apply_shift(&cpu, 0b1110_0101, cpu.get_reg(0)), (0, false));
+        assert_eq!(apply_shift(&cpu, 0b1110_0101, cpu.get_reg(1)), (MAX, true));
     }
 
     #[test]
@@ -438,30 +430,30 @@ mod test {
 
         // ROR 0/RRX
         cpu.set_reg(0, 0x3123453F);
-        assert_eq!(apply_shift(&cpu, 0b00000_110, 0), (0x3123453F >> 1, true));
+        assert_eq!(apply_shift(&cpu, 0b00000_110, cpu.get_reg(0)), (0x3123453F >> 1, true));
 
         cpu.cpsr.carry = true;
         cpu.set_reg(1, 0xFFFFFFFE);
-        assert_eq!(apply_shift(&cpu, 0b00000_110, 1), (0xFFFFFFFF, false));
+        assert_eq!(apply_shift(&cpu, 0b00000_110, cpu.get_reg(1)), (0xFFFFFFFF, false));
 
         // ROR 5 with bit 4 = 1
         assert_eq!(
-            apply_shift(&cpu, 0b00101_110, 0),
+            apply_shift(&cpu, 0b00101_110, cpu.get_reg(0)),
             (0x3123453Fu32.rotate_right(5), true));
         // ROR 5 with bit 4 = 0
         cpu.set_reg(2, 0x12345608);
         assert_eq!(
-            apply_shift(&cpu, 0b00101_110, 2),
+            apply_shift(&cpu, 0b00101_110, cpu.get_reg(2)),
             (0x12345608u32.rotate_right(5), false));
 
         // ROR >= 32
         cpu.set_reg(14, 32);
         assert_eq!(
-            apply_shift(&cpu, 0b1110_0111, 0),
+            apply_shift(&cpu, 0b1110_0111, cpu.get_reg(0)),
             (0x3123453F, false));
         cpu.set_reg(14, 37);
         assert_eq!(
-            apply_shift(&cpu, 0b1110_0111, 2),
+            apply_shift(&cpu, 0b1110_0111, cpu.get_reg(2)),
             (0x12345608u32.rotate_right(5), false));
     }
 
@@ -484,9 +476,32 @@ mod test {
         assert_eq!(cpu.cpsr.zero, false);
         assert_eq!(cpu.cpsr.neg, false);
     }
+    #[test]
+    fn sbc() {
+        // subtract two large numbers and check for overflow
+        let mut cpu = CPU::new();
+        cpu.cpsr.carry = true;
+        cpu.set_reg(2, 0xD1234567);
+
+        let ins = DataProc {
+            opcode: Op::SBC,
+            set_flags: true,
+            rn: 2,
+            rd: 3,
+            // this will get rotated to 0xEF_000000
+            op2: RegOrImm::Imm { rotate: 2, value: 0xEF }
+        };
+        ins.run(&mut cpu);
+
+        assert_eq!(cpu.get_reg(3), 0xE1234559);
+        assert_eq!(cpu.cpsr.carry, false);
+        assert_eq!(cpu.cpsr.zero, false);
+        assert_eq!(cpu.cpsr.neg, true);
+        assert_eq!(cpu.cpsr.overflow, false);
+    }
 
     #[test]
-    fn add_overflow() {
+    fn add_wrapped() {
         let mut cpu = CPU::new();
         cpu.set_reg(0, MAX);
         cpu.set_reg(1, 5);
@@ -504,6 +519,29 @@ mod test {
         assert_eq!(cpu.cpsr.carry, true);
         assert_eq!(cpu.cpsr.zero, false);
         assert_eq!(cpu.cpsr.neg, false);
+        assert_eq!(cpu.cpsr.overflow, false);
+    }
+
+    #[test]
+    fn add_overflow() {
+        let mut cpu = CPU::new();
+        cpu.set_reg(0, MAX/2 - 100);
+        cpu.set_reg(1, MAX/2 - 13135);
+
+        let ins = DataProc {
+            opcode: Op::ADD,
+            set_flags: true,
+            rn: 0,
+            rd: 3,
+            op2: RegOrImm::Reg { shift: 0, reg: 1 }
+        };
+        ins.run(&mut cpu);
+
+        assert_eq!(cpu.get_reg(3), 0xFFFFCC4B);
+        assert_eq!(cpu.cpsr.carry, false);
+        assert_eq!(cpu.cpsr.zero, false);
+        assert_eq!(cpu.cpsr.neg, true);
+        assert_eq!(cpu.cpsr.overflow, true);
     }
 
     #[test]
